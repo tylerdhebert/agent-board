@@ -5,10 +5,13 @@ import { statuses } from "./schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { join } from "path";
+import { mkdirSync } from "fs";
 
 const DB_PATH = join(import.meta.dir, "../../../data/agent-board.db");
 
-const sqlite = new Database(DB_PATH);
+mkdirSync(join(import.meta.dir, "../../../data"), { recursive: true });
+
+const sqlite = new Database(DB_PATH, { create: true });
 
 // Enable WAL mode for better concurrent read performance
 sqlite.run("PRAGMA journal_mode = WAL;");
