@@ -1,0 +1,14 @@
+{
+  "name": "agent-board",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev": "concurrently --names \"server,client\" --prefix-colors \"cyan,magenta\" \"bun run --filter server dev\" \"bun run --filter client dev\"",
+    "build": "bun run --filter '*' build",
+    "install:all": "bun install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
