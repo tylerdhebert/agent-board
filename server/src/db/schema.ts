@@ -144,6 +144,20 @@ export type QueueMessage = typeof queueMessages.$inferSelect;
 export type InsertQueueMessage = typeof queueMessages.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// keyboard_shortcuts
+// ---------------------------------------------------------------------------
+export const keyboardShortcuts = sqliteTable("keyboard_shortcuts", {
+  id: text("id").primaryKey(), // same as action id
+  action: text("action").notNull().unique(),
+  label: text("label").notNull(),
+  group: text("group").notNull(),
+  shortcut: text("shortcut"), // null = disabled
+  defaultShortcut: text("default_shortcut"),
+});
+
+export type KeyboardShortcut = typeof keyboardShortcuts.$inferSelect;
+
+// ---------------------------------------------------------------------------
 // Type exports
 // ---------------------------------------------------------------------------
 export type Status = typeof statuses.$inferSelect;

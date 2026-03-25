@@ -133,6 +133,38 @@ export function initDb() {
     sqlite.run(`ALTER TABLE queue_messages ADD COLUMN author TEXT NOT NULL DEFAULT 'user'`);
   } catch {}
 
+  // Create keyboard_shortcuts table if not present
+  sqlite.run(`
+    CREATE TABLE IF NOT EXISTS keyboard_shortcuts (
+      id TEXT PRIMARY KEY,
+      action TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      "group" TEXT NOT NULL,
+      shortcut TEXT,
+      default_shortcut TEXT
+    )
+  `);
+
+  // Seed shortcuts if empty
+  const existingShortcuts = db.select().from(schema.keyboardShortcuts).all();
+  if (existingShortcuts.length === 0) {
+    const shortcutSeed = [
+      { id: "toggle-admin",      action: "toggle-admin",      label: "Toggle admin panel",   group: "Navigation",    shortcut: "ctrl+,", defaultShortcut: "ctrl+," },
+      { id: "close-modal",       action: "close-modal",       label: "Close / dismiss",       group: "Navigation",    shortcut: "escape", defaultShortcut: "escape" },
+      { id: "filter-all",        action: "filter-all",        label: "Show all cards",        group: "Board",         shortcut: null,     defaultShortcut: null },
+      { id: "filter-unassigned", action: "filter-unassigned", label: "Show unassigned cards", group: "Board",         shortcut: null,     defaultShortcut: null },
+      { id: "toggle-chat",       action: "toggle-chat",       label: "Toggle agent chat",     group: "Chat",          shortcut: "ctrl+/", defaultShortcut: "ctrl+/" },
+      { id: "chat-new",          action: "chat-new",          label: "New conversation",      group: "Chat",          shortcut: null,     defaultShortcut: null },
+      { id: "toggle-summary",    action: "toggle-summary",    label: "Toggle daily summary",  group: "Daily Summary", shortcut: null,     defaultShortcut: null },
+      { id: "summary-prev",      action: "summary-prev",      label: "Previous day",          group: "Daily Summary", shortcut: "[",      defaultShortcut: "[" },
+      { id: "summary-next",      action: "summary-next",      label: "Next day",              group: "Daily Summary", shortcut: "]",      defaultShortcut: "]" },
+    ];
+    for (const s of shortcutSeed) {
+      db.insert(schema.keyboardShortcuts).values(s).run();
+    }
+    console.log("[db] Seeded keyboard shortcuts");
+  }
+
   // Seed statuses if empty
   const existing = db.select().from(statuses).all();
   if (existing.length === 0) {

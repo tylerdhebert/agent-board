@@ -7,8 +7,9 @@ import { EpicsSection } from "./admin/EpicsSection";
 import { FeaturesSection } from "./admin/FeaturesSection";
 import { RulesSection } from "./admin/RulesSection";
 import { DangerSection } from "./admin/DangerSection";
+import { ShortcutsSection } from "./admin/ShortcutsSection";
 
-type Section = "cards" | "move" | "statuses" | "epics" | "features" | "rules" | "danger";
+type Section = "cards" | "move" | "statuses" | "epics" | "features" | "rules" | "shortcuts" | "danger";
 
 export function AdminPanel() {
   const setAdminPanelOpen = useBoardStore((s) => s.setAdminPanelOpen);
@@ -41,7 +42,7 @@ export function AdminPanel() {
 
         {/* Section tabs */}
         <div className="flex border-b border-[#1e1e2a]">
-          {(["cards", "move", "statuses", "epics", "features", "rules", "danger"] as Section[]).map((s) => (
+          {(["cards", "move", "statuses", "epics", "features", "rules", "shortcuts", "danger"] as Section[]).map((s) => (
             <button
               key={s}
               onClick={() => setActiveSection(s)}
@@ -66,6 +67,7 @@ export function AdminPanel() {
           {activeSection === "epics" && <EpicsSection />}
           {activeSection === "features" && <FeaturesSection />}
           {activeSection === "rules" && <RulesSection />}
+          {activeSection === "shortcuts" && <ShortcutsSection />}
           {activeSection === "danger" && <DangerSection />}
         </div>
       </div>

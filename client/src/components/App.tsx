@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { Header } from "./Header";
 import { Board } from "./Board";
 import { CardModal } from "./CardModal";
@@ -17,6 +18,7 @@ import type { Status, InputRequest } from "../api/types";
 export function App() {
   // Connect WebSocket on mount
   useWebSocket();
+  useKeyboardShortcuts();
 
   const openModal = useBoardStore((s) => s.openModal);
   const pendingInputRequests = useBoardStore((s) => s.pendingInputRequests);

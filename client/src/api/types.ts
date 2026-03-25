@@ -92,6 +92,15 @@ export interface QueueMessage {
   readAt: string | null;
 }
 
+export interface KeyboardShortcut {
+  id: string;
+  action: string;
+  label: string;
+  group: string;
+  shortcut: string | null;
+  defaultShortcut: string | null;
+}
+
 export interface Conversation {
   agentId: string;
   total: number;

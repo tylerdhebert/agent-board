@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Card, Epic, Feature } from "../api/types";
+import { useBoardStore } from "../store";
 
 function dateKey(offsetDays = 0): string {
   const d = new Date();
@@ -18,8 +19,21 @@ function formatDate(iso: string): string {
 }
 
 export function DailySummaryBar() {
-  const [expanded, setExpanded] = useState(false);
+  const summaryExpanded = useBoardStore((s) => s.summaryExpanded);
+  const setSummaryExpanded = useBoardStore((s) => s.setSummaryExpanded);
   const [dayOffset, setDayOffset] = useState(0); // 0 = today, -1 = yesterday, etc.
+
+  // Listen for keyboard shortcut day navigation events
+  useEffect(() => {
+    const prev = () => setDayOffset((d) => d - 1);
+    const next = () => setDayOffset((d) => (d < 0 ? d + 1 : d));
+    window.addEventListener("kb:summary-prev", prev);
+    window.addEventListener("kb:summary-next", next);
+    return () => {
+      window.removeEventListener("kb:summary-prev", prev);
+      window.removeEventListener("kb:summary-next", next);
+    };
+  }, []);
 
   const targetDate = dateKey(dayOffset);
   const isToday = dayOffset === 0;
@@ -79,7 +93,7 @@ export function DailySummaryBar() {
     <div className="shrink-0 border-t border-[#1e1e2a] bg-[#0a0a0f]">
       {/* Collapsed bar — always visible */}
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => setSummaryExpanded(!summaryExpanded)}
         className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#111118] transition-colors text-left"
       >
         <span className="text-[10px] font-mono text-[#475569] uppercase tracking-wider shrink-0">
@@ -90,7 +104,7 @@ export function DailySummaryBar() {
           {completedOnDay.length} completed{" "}
           {isToday ? "today" : `on ${formatDate(targetDate)}`}
         </span>
-        {completedOnDay.length > 0 && !expanded && (
+        {completedOnDay.length > 0 && !summaryExpanded && (
           <span className="flex gap-1.5 ml-1 overflow-hidden">
             {completedOnDay.slice(0, 6).map((c) => (
               <span
@@ -108,12 +122,12 @@ export function DailySummaryBar() {
           </span>
         )}
         <span className="ml-auto text-[10px] font-mono text-[#334155]">
-          {expanded ? "▼" : "▲"}
+          {summaryExpanded ? "▼" : "▲"}
         </span>
       </button>
 
       {/* Expanded panel */}
-      {expanded && (
+      {summaryExpanded && (
         <div className="border-t border-[#1e1e2a] bg-[#0d0d14] max-h-64 overflow-y-auto">
           {/* Day navigation */}
           <div className="flex items-center gap-3 px-4 py-2 border-b border-[#1e1e2a] sticky top-0 bg-[#0d0d14]">

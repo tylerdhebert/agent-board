@@ -45,6 +45,14 @@ interface BoardStore {
   adminPanelOpen: boolean;
   setAdminPanelOpen: (open: boolean) => void;
 
+  // Chat widget open state (lifted for keyboard shortcut access)
+  chatOpen: boolean;
+  setChatOpen: (open: boolean) => void;
+
+  // Daily summary expanded state (lifted for keyboard shortcut access)
+  summaryExpanded: boolean;
+  setSummaryExpanded: (expanded: boolean) => void;
+
   // Cards with unseen comments (cleared when card is opened)
   unseenCommentCardIds: Set<string>;
   addUnseenComment: (cardId: string) => void;
@@ -97,6 +105,12 @@ export const useBoardStore = create<BoardStore>((set) => ({
 
   adminPanelOpen: false,
   setAdminPanelOpen: (open) => set({ adminPanelOpen: open }),
+
+  chatOpen: false,
+  setChatOpen: (open) => set({ chatOpen: open }),
+
+  summaryExpanded: false,
+  setSummaryExpanded: (expanded) => set({ summaryExpanded: expanded }),
 
   unseenCommentCardIds: new Set(),
   addUnseenComment: (cardId) =>

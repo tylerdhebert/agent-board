@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api/client";
 import type { QueueMessage, Conversation } from "../api/types";
+import { useBoardStore } from "../store";
 
 // ---------------------------------------------------------------------------
 // Thread window — one per open conversation
@@ -162,10 +163,18 @@ function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindow
 // ---------------------------------------------------------------------------
 
 export function ChatWidget() {
-  const [mainOpen, setMainOpen] = useState(false);
+  const chatOpen = useBoardStore((s) => s.chatOpen);
+  const setChatOpen = useBoardStore((s) => s.setChatOpen);
   const [openThreads, setOpenThreads] = useState<string[]>([]);
   const [showNewChat, setShowNewChat] = useState(false);
   const [newAgentKey, setNewAgentKey] = useState("");
+
+  // Listen for keyboard shortcut "chat-new" event
+  useEffect(() => {
+    const handler = () => setShowNewChat(true);
+    window.addEventListener("kb:chat-new", handler);
+    return () => window.removeEventListener("kb:chat-new", handler);
+  }, []);
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["queue", "conversations"],
@@ -215,7 +224,7 @@ export function ChatWidget() {
       {/* Main widget */}
       <div className="fixed bottom-8 left-0 w-[440px] z-40">
         {/* Conversation list panel */}
-        {mainOpen && (
+        {chatOpen && (
           <div
             className="flex flex-col border border-b-0 border-[#2a2a38] rounded-t-lg overflow-hidden shadow-2xl"
             style={{ maxHeight: 320, background: "#1c1c28" }}
@@ -223,7 +232,7 @@ export function ChatWidget() {
             {/* Panel header — click to collapse */}
             <div
               className="flex items-center justify-between px-4 py-2.5 border-b border-[#2a2a38] shrink-0 cursor-pointer hover:bg-[#22222e] transition-colors select-none"
-              onClick={() => setMainOpen(false)}
+              onClick={() => setChatOpen(false)}
             >
               <span className="text-[10px] font-mono text-[#475569] uppercase tracking-wider">
                 Conversations
@@ -308,7 +317,7 @@ export function ChatWidget() {
 
         {/* Docked bar */}
         <button
-          onClick={() => setMainOpen((v) => !v)}
+          onClick={() => setChatOpen(!chatOpen)}
           className={`w-full flex items-center gap-2.5 px-4 py-2 border border-b-0 border-[#2a2a38] rounded-t bg-[#0a0a0f] hover:bg-[#111118] transition-colors text-left ${
             unreadInClosedThreads > 0 ? "chat-bar-glow" : ""
           }`}
@@ -329,7 +338,7 @@ export function ChatWidget() {
 
 
           <span className="ml-auto text-[10px] font-mono text-[#334155] shrink-0">
-            {mainOpen ? "▼" : "▲"}
+            {chatOpen ? "▼" : "▲"}
           </span>
         </button>
       </div>
