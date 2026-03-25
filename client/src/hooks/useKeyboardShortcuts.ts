@@ -68,10 +68,32 @@ export function useKeyboardShortcuts() {
         case "summary-next":
           window.dispatchEvent(new CustomEvent("kb:summary-next"));
           break;
+        case "sidebar-prev":
+          window.dispatchEvent(new CustomEvent("kb:sidebar-prev"));
+          break;
+        case "sidebar-next":
+          window.dispatchEvent(new CustomEvent("kb:sidebar-next"));
+          break;
+        case "sidebar-toggle":
+          window.dispatchEvent(new CustomEvent("kb:sidebar-toggle"));
+          break;
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const upHandler = (e: KeyboardEvent) => {
+      if (e.key === "Control") useBoardStore.getState().setCtrlHeld(false);
+    };
+
+    const downHandler = (e: KeyboardEvent) => {
+      if (e.key === "Control") useBoardStore.getState().setCtrlHeld(true);
+      handler(e);
+    };
+
+    window.addEventListener("keydown", downHandler);
+    window.addEventListener("keyup", upHandler);
+    return () => {
+      window.removeEventListener("keydown", downHandler);
+      window.removeEventListener("keyup", upHandler);
+    };
   }, [shortcuts]);
 }

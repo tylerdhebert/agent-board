@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Card, Epic, Feature } from "../api/types";
 import { useBoardStore } from "../store";
+import { useShortcutHint } from "../hooks/useShortcutHint";
+import { ShortcutBadge } from "./ShortcutBadge";
 
 function dateKey(offsetDays = 0): string {
   const d = new Date();
@@ -22,6 +24,9 @@ export function DailySummaryBar() {
   const summaryExpanded = useBoardStore((s) => s.summaryExpanded);
   const setSummaryExpanded = useBoardStore((s) => s.setSummaryExpanded);
   const [dayOffset, setDayOffset] = useState(0); // 0 = today, -1 = yesterday, etc.
+  const toggleHint = useShortcutHint("toggle-summary");
+  const prevHint = useShortcutHint("summary-prev");
+  const nextHint = useShortcutHint("summary-next");
 
   // Listen for keyboard shortcut day navigation events
   useEffect(() => {
@@ -121,7 +126,8 @@ export function DailySummaryBar() {
             )}
           </span>
         )}
-        <span className="ml-auto text-[10px] font-mono text-[#334155]">
+        <span className="ml-auto flex items-center gap-1 text-[10px] font-mono text-[#334155]">
+          <ShortcutBadge shortcut={toggleHint} />
           {summaryExpanded ? "▼" : "▲"}
         </span>
       </button>
@@ -133,8 +139,9 @@ export function DailySummaryBar() {
           <div className="flex items-center gap-3 px-4 py-2 border-b border-[#1e1e2a] sticky top-0 bg-[#0d0d14]">
             <button
               onClick={() => setDayOffset((d) => d - 1)}
-              className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] transition-colors"
+              className="flex items-center gap-1 text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] transition-colors"
             >
+              <ShortcutBadge shortcut={prevHint} />
               ← prev
             </button>
             <span className="text-[11px] font-mono text-[#e2e8f0] flex-1 text-center">
@@ -143,9 +150,10 @@ export function DailySummaryBar() {
             <button
               onClick={() => setDayOffset((d) => d + 1)}
               disabled={dayOffset >= 0}
-              className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               next →
+              <ShortcutBadge shortcut={nextHint} />
             </button>
           </div>
 

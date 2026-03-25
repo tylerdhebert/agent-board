@@ -65,6 +65,7 @@ export function initDb() {
       description TEXT NOT NULL DEFAULT '',
       status_id TEXT NOT NULL REFERENCES statuses(id),
       agent_id TEXT,
+      completed_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -93,47 +94,27 @@ export function initDb() {
     )
   `);
 
-  // Migrate: add completed_at if not present (safe to run repeatedly)
-  try {
-    sqlite.run(`ALTER TABLE cards ADD COLUMN completed_at TEXT`);
-  } catch {
-    // Column already exists — no-op
-  }
+  sqlite.run(`
+    CREATE TABLE IF NOT EXISTS transition_rules (
+      id TEXT PRIMARY KEY,
+      agent_pattern TEXT,
+      from_status_id TEXT REFERENCES statuses(id) ON DELETE CASCADE,
+      to_status_id TEXT NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
 
-  // Create transition_rules table if not present
-  try {
-    sqlite.run(`
-      CREATE TABLE IF NOT EXISTS transition_rules (
-        id TEXT PRIMARY KEY,
-        agent_pattern TEXT,
-        from_status_id TEXT REFERENCES statuses(id) ON DELETE CASCADE,
-        to_status_id TEXT NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
-  } catch {
-    // already exists
-  }
-
-  // Create queue_messages table if not present
-  try {
-    sqlite.run(`CREATE TABLE IF NOT EXISTS queue_messages (
+  sqlite.run(`
+    CREATE TABLE IF NOT EXISTS queue_messages (
       id TEXT PRIMARY KEY,
       agent_id TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT 'user',
       body TEXT NOT NULL,
-      importance TEXT NOT NULL DEFAULT 'medium',
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       read_at TEXT
-    )`);
-  } catch {}
-
-  // Migrate: add author column to queue_messages if not present
-  try {
-    sqlite.run(`ALTER TABLE queue_messages ADD COLUMN author TEXT NOT NULL DEFAULT 'user'`);
-  } catch {}
-
-  // Create keyboard_shortcuts table if not present
+    )
+  `);
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS keyboard_shortcuts (
       id TEXT PRIMARY KEY,
@@ -145,24 +126,27 @@ export function initDb() {
     )
   `);
 
-  // Seed shortcuts if empty
-  const existingShortcuts = db.select().from(schema.keyboardShortcuts).all();
-  if (existingShortcuts.length === 0) {
-    const shortcutSeed = [
-      { id: "toggle-admin",      action: "toggle-admin",      label: "Toggle admin panel",   group: "Navigation",    shortcut: "ctrl+,", defaultShortcut: "ctrl+," },
-      { id: "close-modal",       action: "close-modal",       label: "Close / dismiss",       group: "Navigation",    shortcut: "escape", defaultShortcut: "escape" },
-      { id: "filter-all",        action: "filter-all",        label: "Show all cards",        group: "Board",         shortcut: null,     defaultShortcut: null },
-      { id: "filter-unassigned", action: "filter-unassigned", label: "Show unassigned cards", group: "Board",         shortcut: null,     defaultShortcut: null },
-      { id: "toggle-chat",       action: "toggle-chat",       label: "Toggle agent chat",     group: "Chat",          shortcut: "ctrl+/", defaultShortcut: "ctrl+/" },
-      { id: "chat-new",          action: "chat-new",          label: "New conversation",      group: "Chat",          shortcut: null,     defaultShortcut: null },
-      { id: "toggle-summary",    action: "toggle-summary",    label: "Toggle daily summary",  group: "Daily Summary", shortcut: null,     defaultShortcut: null },
-      { id: "summary-prev",      action: "summary-prev",      label: "Previous day",          group: "Daily Summary", shortcut: "[",      defaultShortcut: "[" },
-      { id: "summary-next",      action: "summary-next",      label: "Next day",              group: "Daily Summary", shortcut: "]",      defaultShortcut: "]" },
-    ];
-    for (const s of shortcutSeed) {
-      db.insert(schema.keyboardShortcuts).values(s).run();
-    }
-    console.log("[db] Seeded keyboard shortcuts");
+  // Upsert shortcuts — INSERT OR IGNORE so existing user customizations are preserved
+  // but new actions added in future releases still appear
+  const shortcutSeed = [
+    { id: "toggle-admin",      action: "toggle-admin",      label: "Toggle admin panel",   group: "Navigation",    shortcut: "ctrl+,", defaultShortcut: "ctrl+," },
+    { id: "close-modal",       action: "close-modal",       label: "Close / dismiss",       group: "Navigation",    shortcut: "escape", defaultShortcut: "escape" },
+    { id: "filter-all",        action: "filter-all",        label: "Show all cards",        group: "Board",         shortcut: null,     defaultShortcut: null },
+    { id: "filter-unassigned", action: "filter-unassigned", label: "Show unassigned cards", group: "Board",         shortcut: null,     defaultShortcut: null },
+    { id: "sidebar-prev",      action: "sidebar-prev",      label: "Previous epic / feature", group: "Board",       shortcut: null,     defaultShortcut: null },
+    { id: "sidebar-next",      action: "sidebar-next",      label: "Next epic / feature",   group: "Board",         shortcut: null,     defaultShortcut: null },
+    { id: "sidebar-toggle",    action: "sidebar-toggle",    label: "Expand / collapse epic", group: "Board",         shortcut: null,     defaultShortcut: null },
+    { id: "toggle-chat",       action: "toggle-chat",       label: "Toggle agent chat",     group: "Chat",          shortcut: "ctrl+/", defaultShortcut: "ctrl+/" },
+    { id: "chat-new",          action: "chat-new",          label: "New conversation",      group: "Chat",          shortcut: null,     defaultShortcut: null },
+    { id: "toggle-summary",    action: "toggle-summary",    label: "Toggle daily summary",  group: "Daily Summary", shortcut: null,     defaultShortcut: null },
+    { id: "summary-prev",      action: "summary-prev",      label: "Previous day",          group: "Daily Summary", shortcut: "[",      defaultShortcut: "[" },
+    { id: "summary-next",      action: "summary-next",      label: "Next day",              group: "Daily Summary", shortcut: "]",      defaultShortcut: "]" },
+  ];
+  for (const s of shortcutSeed) {
+    sqlite.run(
+      `INSERT OR IGNORE INTO keyboard_shortcuts (id, action, label, "group", shortcut, default_shortcut) VALUES (?, ?, ?, ?, ?, ?)`,
+      [s.id, s.action, s.label, s.group, s.shortcut ?? null, s.defaultShortcut ?? null]
+    );
   }
 
   // Seed statuses if empty

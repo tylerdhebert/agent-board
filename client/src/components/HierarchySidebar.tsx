@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { api } from "../api/client";
 import type { Epic, Feature, Card } from "../api/types";
+import { useShortcutHint } from "../hooks/useShortcutHint";
+import { ShortcutBadge } from "./ShortcutBadge";
 
 export function HierarchySidebar() {
   const hierarchyFilter = useBoardStore((s) => s.hierarchyFilter);
@@ -35,6 +37,69 @@ export function HierarchySidebar() {
     },
     staleTime: 5_000,
   });
+
+  // Ordered list of all sidebar filter items: all → epics+features → unassigned
+  const sidebarItems = [
+    { type: "all" } as const,
+    ...epics.flatMap((e) => [
+      { type: "epic", id: e.id } as const,
+      ...features.filter((f) => f.epicId === e.id).map((f) => ({ type: "feature", id: f.id }) as const),
+    ]),
+    { type: "unassigned" } as const,
+  ];
+
+  useEffect(() => {
+    const move = (dir: 1 | -1) => {
+      const currentIdx = sidebarItems.findIndex((item) => {
+        if (item.type !== hierarchyFilter.type) return false;
+        if (item.type === "epic" && hierarchyFilter.type === "epic") return item.id === hierarchyFilter.id;
+        if (item.type === "feature" && hierarchyFilter.type === "feature") return item.id === hierarchyFilter.id;
+        return true;
+      });
+      const current = sidebarItems[currentIdx];
+      const next = sidebarItems[(currentIdx + dir + sidebarItems.length) % sidebarItems.length];
+      if (!next) return;
+      setHierarchyFilter(next);
+      // Collapse the epic context we're leaving, expand the one we're entering
+      const ownerEpicId = (item: typeof sidebarItems[number]) => {
+        if (item.type === "epic") return item.id;
+        if (item.type === "feature") return features.find((f) => f.id === item.id)?.epicId ?? null;
+        return null;
+      };
+      setExpandedEpics((prev) => {
+        const updated = new Set(prev);
+        const prevEpicId = current ? ownerEpicId(current) : null;
+        const nextEpicId = ownerEpicId(next);
+        if (prevEpicId && prevEpicId !== nextEpicId) updated.delete(prevEpicId);
+        if (nextEpicId) updated.add(nextEpicId);
+        return updated;
+      });
+    };
+    const onNext = () => move(1);
+    const onPrev = () => move(-1);
+    const onToggle = () => {
+      if (hierarchyFilter.type === "epic") toggleEpic(hierarchyFilter.id);
+      else if (hierarchyFilter.type === "feature") {
+        const feat = sidebarItems.find(
+          (i) => i.type === "feature" && i.id === hierarchyFilter.id
+        ) as { type: "feature"; id: string } | undefined;
+        if (feat) {
+          const parentEpic = epics.find((e) =>
+            features.some((f) => f.id === feat.id && f.epicId === e.id)
+          );
+          if (parentEpic) toggleEpic(parentEpic.id);
+        }
+      }
+    };
+    window.addEventListener("kb:sidebar-next", onNext);
+    window.addEventListener("kb:sidebar-prev", onPrev);
+    window.addEventListener("kb:sidebar-toggle", onToggle);
+    return () => {
+      window.removeEventListener("kb:sidebar-next", onNext);
+      window.removeEventListener("kb:sidebar-prev", onPrev);
+      window.removeEventListener("kb:sidebar-toggle", onToggle);
+    };
+  }, [sidebarItems, hierarchyFilter, setHierarchyFilter, setExpandedEpics, epics, features]);
 
   const toggleEpic = (epicId: string) => {
     setExpandedEpics((prev) => {
@@ -69,6 +134,10 @@ export function HierarchySidebar() {
     (c) => c.epicId === null && c.featureId === null
   ).length;
 
+  const filterAllHint = useShortcutHint("filter-all");
+  const filterUnassignedHint = useShortcutHint("filter-unassigned");
+  const sidebarToggleHint = useShortcutHint("sidebar-toggle");
+
   return (
     <aside className="w-[220px] shrink-0 flex flex-col bg-[#0d0d14] border-r border-[#1e1e2a] overflow-y-auto">
       {/* Sidebar header */}
@@ -86,6 +155,7 @@ export function HierarchySidebar() {
           active={isActive({ type: "all" })}
           onClick={() => setHierarchyFilter({ type: "all" })}
           indent={0}
+          hint={filterAllHint}
         />
 
         {/* Epics and their features */}
@@ -148,6 +218,7 @@ export function HierarchySidebar() {
                 >
                   {getEpicCardCount(epic.id)}
                 </span>
+                <ShortcutBadge shortcut={sidebarToggleHint} />
               </div>
 
               {/* Features under this epic */}
@@ -191,6 +262,7 @@ export function HierarchySidebar() {
           onClick={() => setHierarchyFilter({ type: "unassigned" })}
           indent={0}
           muted
+          hint={filterUnassignedHint}
         />
       </nav>
     </aside>
@@ -204,9 +276,10 @@ interface SidebarItemProps {
   onClick: () => void;
   indent: number;
   muted?: boolean;
+  hint?: string | null;
 }
 
-function SidebarItem({ label, count, active, onClick, indent, muted }: SidebarItemProps) {
+function SidebarItem({ label, count, active, onClick, indent, muted, hint }: SidebarItemProps) {
   const paddingLeft = 12 + indent * 8;
 
   return (
@@ -222,6 +295,11 @@ function SidebarItem({ label, count, active, onClick, indent, muted }: SidebarIt
       style={{ paddingLeft }}
     >
       <span className="flex-1 text-[13px] font-mono truncate">{label}</span>
+      {hint && (
+        <kbd className="px-1 py-0.5 text-[9px] font-mono bg-[#1e1e30] text-[#6366f1] border border-[#3a3a58] rounded leading-none pointer-events-none">
+          {hint}
+        </kbd>
+      )}
       <span
         className={`text-[11px] font-mono shrink-0 px-1 rounded mr-2 ${
           active

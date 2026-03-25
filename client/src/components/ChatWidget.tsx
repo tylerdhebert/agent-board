@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api/client";
 import type { QueueMessage, Conversation } from "../api/types";
 import { useBoardStore } from "../store";
+import { useShortcutHint } from "../hooks/useShortcutHint";
+import { ShortcutBadge } from "./ShortcutBadge";
 
 // ---------------------------------------------------------------------------
 // Thread window — one per open conversation
@@ -25,6 +27,10 @@ function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindow
   const scrollRefCallback = useCallback((el: HTMLDivElement | null) => {
     scrollRef.current = el;
     if (el) setTimeout(() => { el.scrollTop = el.scrollHeight; }, 0);
+  }, []);
+
+  const textareaRefCallback = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) setTimeout(() => el.focus(), 0);
   }, []);
 
   const { data: messages = [] } = useQuery<QueueMessage[]>({
@@ -130,6 +136,7 @@ function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindow
 
           <div className="border-t border-[#2a2a38] px-3 py-2 shrink-0">
             <textarea
+              ref={textareaRefCallback}
               className="w-full bg-[#12121f] border border-[#2a2a38] rounded-xl px-3 py-2 text-[12px] font-mono text-white placeholder-[#475569] focus:outline-none focus:border-[#6366f1] resize-none"
               placeholder="Message..."
               rows={2}
@@ -165,6 +172,7 @@ function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindow
 export function ChatWidget() {
   const chatOpen = useBoardStore((s) => s.chatOpen);
   const setChatOpen = useBoardStore((s) => s.setChatOpen);
+  const chatHint = useShortcutHint("toggle-chat");
   const [openThreads, setOpenThreads] = useState<string[]>([]);
   const [showNewChat, setShowNewChat] = useState(false);
   const [newAgentKey, setNewAgentKey] = useState("");
@@ -337,7 +345,8 @@ export function ChatWidget() {
           )}
 
 
-          <span className="ml-auto text-[10px] font-mono text-[#334155] shrink-0">
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-mono text-[#334155] shrink-0">
+            <ShortcutBadge shortcut={chatHint} />
             {chatOpen ? "▼" : "▲"}
           </span>
         </button>

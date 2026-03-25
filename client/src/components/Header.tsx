@@ -1,9 +1,12 @@
 import { useBoardStore } from "../store";
+import { useShortcutHint } from "../hooks/useShortcutHint";
+import { ShortcutBadge } from "./ShortcutBadge";
 
 export function Header() {
   const wsStatus = useBoardStore((s) => s.wsStatus);
   const pendingInputRequests = useBoardStore((s) => s.pendingInputRequests);
   const setAdminPanelOpen = useBoardStore((s) => s.setAdminPanelOpen);
+  const adminHint = useShortcutHint("toggle-admin");
 
   const statusColor =
     wsStatus === "connected"
@@ -43,6 +46,7 @@ export function Header() {
         >
           <span>⚙</span>
           <span>Admin</span>
+          <ShortcutBadge shortcut={adminHint} />
         </button>
         <div className="flex items-center gap-1.5">
           <span

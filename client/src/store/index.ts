@@ -53,6 +53,10 @@ interface BoardStore {
   summaryExpanded: boolean;
   setSummaryExpanded: (expanded: boolean) => void;
 
+  // Ctrl key held (for shortcut hint overlay)
+  ctrlHeld: boolean;
+  setCtrlHeld: (held: boolean) => void;
+
   // Cards with unseen comments (cleared when card is opened)
   unseenCommentCardIds: Set<string>;
   addUnseenComment: (cardId: string) => void;
@@ -111,6 +115,9 @@ export const useBoardStore = create<BoardStore>((set) => ({
 
   summaryExpanded: false,
   setSummaryExpanded: (expanded) => set({ summaryExpanded: expanded }),
+
+  ctrlHeld: false,
+  setCtrlHeld: (held) => set({ ctrlHeld: held }),
 
   unseenCommentCardIds: new Set(),
   addUnseenComment: (cardId) =>
