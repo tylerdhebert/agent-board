@@ -181,6 +181,8 @@ export function ChatWidget() {
   const [newAgentKey, setNewAgentKey] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
 
   // Listen for keyboard shortcut "chat-new" event
   useEffect(() => {
@@ -188,6 +190,27 @@ export function ChatWidget() {
     window.addEventListener("kb:chat-new", handler);
     return () => window.removeEventListener("kb:chat-new", handler);
   }, []);
+
+  // Close overflow popover on outside click
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setOverflowOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [overflowOpen]);
+
+  const swapOverflow = (agentId: string) => {
+    setOpenThreads((prev) => {
+      const without = prev.filter((t) => t !== agentId);
+      const [oldest, ...remaining] = without;
+      return [...remaining.slice(0, 2), agentId, oldest, ...remaining.slice(2)];
+    });
+    setOverflowOpen(false);
+  };
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["queue", "conversations"],
@@ -252,8 +275,8 @@ export function ChatWidget() {
 
   return (
     <>
-      {/* Thread windows — positioned to the right of the main widget */}
-      {openThreads.map((agentId, index) => {
+      {/* Thread windows — first 3 visible slots */}
+      {openThreads.slice(0, 3).map((agentId, index) => {
         const conv = conversations.find((c) => c.agentId === agentId);
         return (
           <ChatThreadWindow
@@ -265,6 +288,68 @@ export function ChatWidget() {
           />
         );
       })}
+
+      {/* Overflow bar — shown when more than 3 threads are open */}
+      {openThreads.length > 3 && (() => {
+        const overflowIds = openThreads.slice(3);
+        const overflowUnread = overflowIds.reduce((sum, id) => {
+          const conv = conversations.find((c) => c.agentId === id);
+          return sum + (conv?.unread ?? 0);
+        }, 0);
+        const hasUnread = overflowUnread > 0;
+        return (
+          <div
+            ref={overflowRef}
+            className="fixed z-40"
+            style={{ bottom: 32, left: 1440 }}
+          >
+            {/* Popover — shown above the bar when open */}
+            {overflowOpen && (
+              <div
+                className="absolute w-[200px] border border-[#2a2a38] rounded-lg shadow-2xl overflow-hidden"
+                style={{ bottom: "calc(100% + 4px)", left: 0, background: "#1c1c28" }}
+              >
+                {overflowIds.map((id) => {
+                  const conv = conversations.find((c) => c.agentId === id);
+                  const unread = conv?.unread ?? 0;
+                  return (
+                    <div
+                      key={id}
+                      className="px-3 py-2 text-[12px] font-mono text-[#e2e8f0] hover:bg-[#22222e] cursor-pointer flex items-center justify-between"
+                      onClick={() => swapOverflow(id)}
+                    >
+                      <span className="truncate">{id}</span>
+                      {unread > 0 && (
+                        <span className="w-4 h-4 rounded-full bg-[#6366f1] text-white text-[9px] font-bold flex items-center justify-center shrink-0 ml-2">
+                          {unread}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* The bar itself */}
+            <div
+              className={`w-[200px] flex items-center justify-between px-3 py-2.5 border border-b-0 border-[#2a2a38] rounded-t-lg cursor-pointer select-none hover:bg-[#22222e] transition-colors ${
+                hasUnread ? "chat-bar-glow" : ""
+              }`}
+              style={{ background: "#1c1c28" }}
+              onClick={() => setOverflowOpen((v) => !v)}
+            >
+              <span className="text-[11px] font-mono text-[#e2e8f0]">
+                +{overflowIds.length} more
+              </span>
+              {hasUnread && (
+                <span className="w-4 h-4 rounded-full bg-[#6366f1] text-white text-[9px] font-bold flex items-center justify-center shrink-0 ml-2">
+                  {overflowUnread}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Main widget */}
       <div className="fixed bottom-8 left-0 w-[440px] z-40">
