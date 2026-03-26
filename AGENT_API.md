@@ -2,7 +2,23 @@
 
 Base URL: `http://localhost:31377/api`
 
+**If the agent board is running locally, use it for all tasks.** It is the primary coordination surface between you and the user — for tracking work, signaling progress, asking questions, and receiving messages. Do not skip it in favor of inline comments or silent execution.
+
 This board is the shared workspace between you and the user. Use it to track your work, signal progress, and — critically — ask the user for input when you need it.
+
+---
+
+## Orchestrator Responsibilities
+
+If you are an **orchestrator** (spawning and directing other agents), you have additional responsibilities:
+
+- **Assign stable agent IDs** to each sub-agent before spawning them (e.g. `implementer-1`, `reviewer-1`, `planner-1`). These IDs are used for card ownership, chat routing, and queue filtering — they must be unique and consistent for the lifetime of the task.
+- **Create cards for sub-agents** before or immediately after spawning them. Each agent should have a card to work from.
+- **Assign cards to agents** by setting `agentId` on the card so ownership is visible in the UI.
+- **Use epics and features** to group related work. Create an epic for the overall goal, features for major workstreams, and cards for individual agent tasks.
+- **Do not claim cards yourself** unless you are doing the work. Orchestrators typically create and assign, not execute.
+- **Monitor via comments** — sub-agents post progress comments; you can read them via `GET /cards/:id` to decide next steps.
+- **Route messages correctly** — if the user sends a message to a specific agent ID, forward it or ensure that agent checks its queue. Use `GET /queue/conversations` to see which agents have unread messages.
 
 ---
 
@@ -200,12 +216,14 @@ Returns a summary per agent: `{ agentId, total, unread, lastAt }`.
 
 **`author` field:** `"user"` means the human sent it. Any other value is the agent id of the sender.
 
-**Recommended per-turn workflow:**
+**Per-turn workflow:**
 1. At the start of each turn, call `GET /queue?agentId=<your-id>&status=pending`.
 2. Read the messages and adjust your plan accordingly.
 3. Reply with `POST /queue` (set `author` to your agent id) if a response is warranted.
 4. Call `POST /queue/:id/read` for each message you act on.
 5. Note any changes to your plan in a comment on the relevant card.
+6. Additionally, at the end of each turn, call `GET /queue?agentId=<your-id>&status=pending`.
+7. If there are additional new messages for you, do not end your turn if the user has requested additional work.
 
 ---
 
