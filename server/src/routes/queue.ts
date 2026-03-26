@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { db, sqlite } from "../db";
 import { queueMessages } from "../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 
@@ -22,15 +22,11 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
     return rows;
   })
 
-  // GET /api/queue — message list. Optional fuzzy ?agentId= filter, optional ?status= filter
+  // GET /api/queue — message list. Optional ?agentId= filter (exact match), optional ?status= filter
   .get("/", ({ query }) => {
     let q = db.select().from(queueMessages).$dynamic();
     if (query.agentId) {
-      // Fuzzy match: the stored agent_id is a substring of the queried agentId (case-insensitive)
-      // e.g. querying "implementer-1" matches messages addressed to "implementer"
-      q = q.where(
-        sql`lower(${query.agentId}) LIKE '%' || lower(${queueMessages.agentId}) || '%'`
-      );
+      q = q.where(eq(queueMessages.agentId, query.agentId));
     }
     if (query.status) q = q.where(eq(queueMessages.status, query.status));
     return q.orderBy(queueMessages.createdAt).all();

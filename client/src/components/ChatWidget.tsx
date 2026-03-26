@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api/client";
-import type { QueueMessage, Conversation } from "../api/types";
+import type { QueueMessage, Conversation, Card } from "../api/types";
 import { useBoardStore } from "../store";
 import { useShortcutHint } from "../hooks/useShortcutHint";
 import { ShortcutBadge } from "./ShortcutBadge";
@@ -176,6 +176,8 @@ export function ChatWidget() {
   const [openThreads, setOpenThreads] = useState<string[]>([]);
   const [showNewChat, setShowNewChat] = useState(false);
   const [newAgentKey, setNewAgentKey] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   // Listen for keyboard shortcut "chat-new" event
   useEffect(() => {
@@ -193,6 +195,36 @@ export function ChatWidget() {
     staleTime: 5_000,
   });
 
+  const { data: cards = [] } = useQuery<Card[]>({
+    queryKey: ["cards"],
+    queryFn: async () => {
+      const { data } = await api.api.cards.get();
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const knownAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of conversations) ids.add(c.agentId);
+    for (const card of cards) {
+      if (card.agentId) ids.add(card.agentId);
+    }
+    return Array.from(ids).sort();
+  }, [conversations, cards]);
+
+  const suggestions = useMemo(() => {
+    if (!newAgentKey) return [];
+    const lower = newAgentKey.toLowerCase();
+    return knownAgentIds.filter((id) => id.toLowerCase().includes(lower));
+  }, [newAgentKey, knownAgentIds]);
+
+  const showDropdown =
+    dropdownOpen &&
+    newAgentKey.length > 0 &&
+    suggestions.length > 0 &&
+    !(suggestions.length === 1 && suggestions[0] === newAgentKey);
+
   const toggleThread = (agentId: string) => {
     setOpenThreads((prev) =>
       prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
@@ -205,6 +237,8 @@ export function ChatWidget() {
     }
     setShowNewChat(false);
     setNewAgentKey("");
+    setDropdownOpen(false);
+    setHighlightedIndex(-1);
   };
 
   // Only pulse the main bar for unread in threads that aren't open
@@ -253,26 +287,77 @@ export function ChatWidget() {
               </button>
             </div>
 
-            {/* New chat input */}
+            {/* New chat input with autocomplete */}
             {showNewChat && (
-              <div className="flex gap-2 px-4 py-2 border-b border-[#2a2a38] shrink-0">
-                <input
-                  className="flex-1 bg-[#12121f] border border-[#2a2a38] rounded px-2 py-1 text-xs font-mono text-white placeholder-[#475569] focus:outline-none focus:border-[#6366f1]"
-                  placeholder="Agent key (e.g. implementer)"
-                  value={newAgentKey}
-                  onChange={(e) => setNewAgentKey(e.target.value)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && newAgentKey.trim() && openNewChat(newAgentKey.trim())
-                  }
-                  autoFocus
-                />
-                <button
-                  className="px-3 py-1 bg-[#6366f1] hover:bg-[#818cf8] text-white text-xs font-mono rounded disabled:opacity-40 transition-colors"
-                  disabled={!newAgentKey.trim()}
-                  onClick={() => openNewChat(newAgentKey.trim())}
-                >
-                  open
-                </button>
+              <div className="relative border-b border-[#2a2a38] shrink-0">
+                <div className="flex gap-2 px-4 py-2">
+                  <input
+                    className="flex-1 bg-[#12121f] border border-[#2a2a38] rounded px-2 py-1 text-xs font-mono text-white placeholder-[#475569] focus:outline-none focus:border-[#6366f1]"
+                    placeholder="Agent key (e.g. implementer)"
+                    value={newAgentKey}
+                    onChange={(e) => {
+                      setNewAgentKey(e.target.value);
+                      setDropdownOpen(true);
+                      setHighlightedIndex(-1);
+                    }}
+                    onFocus={() => setDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setDropdownOpen(false), 120)}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setHighlightedIndex((i) =>
+                          Math.min(i + 1, Math.min(suggestions.length, 6) - 1)
+                        );
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setHighlightedIndex((i) => Math.max(i - 1, -1));
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (showDropdown && highlightedIndex >= 0) {
+                          openNewChat(suggestions[highlightedIndex]);
+                        } else if (newAgentKey.trim()) {
+                          openNewChat(newAgentKey.trim());
+                        }
+                      } else if (e.key === "Escape") {
+                        setDropdownOpen(false);
+                        setHighlightedIndex(-1);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    className="px-3 py-1 bg-[#6366f1] hover:bg-[#818cf8] text-white text-xs font-mono rounded disabled:opacity-40 transition-colors"
+                    disabled={!newAgentKey.trim()}
+                    onClick={() => openNewChat(newAgentKey.trim())}
+                  >
+                    open
+                  </button>
+                </div>
+                {showDropdown && (
+                  <div
+                    className="absolute left-0 right-0 z-50 border border-[#2a2a38] rounded-b overflow-hidden shadow-lg"
+                    style={{ background: "#1c1c28", top: "100%", marginTop: -1 }}
+                  >
+                    {suggestions.slice(0, 6).map((id, i) => (
+                      <div
+                        key={id}
+                        className="px-4 font-mono text-[12px] text-[#e2e8f0] cursor-pointer select-none flex items-center"
+                        style={{
+                          height: 28,
+                          background: i === highlightedIndex ? "#22222e" : undefined,
+                          color: i === highlightedIndex ? "#818cf8" : "#e2e8f0",
+                        }}
+                        onMouseEnter={() => setHighlightedIndex(i)}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          openNewChat(id);
+                        }}
+                      >
+                        {id}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
