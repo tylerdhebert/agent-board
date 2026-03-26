@@ -14,11 +14,12 @@ import { useEscapeToClose } from "../hooks/useEscapeStack";
 interface ThreadWindowProps {
   agentId: string;
   leftOffset: number;
+  bottomOffset: number;
   unread: number;
   onClose: () => void;
 }
 
-function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindowProps) {
+function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }: ThreadWindowProps) {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [collapsed, setCollapsed] = useState(false);
@@ -79,7 +80,7 @@ function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindow
   return (
     <div
       className="fixed z-40 w-[320px] flex flex-col border border-b-0 border-[#2a2a38] rounded-t-lg overflow-hidden shadow-2xl"
-      style={{ bottom: 32, left: leftOffset, height: collapsed ? "auto" : 380, background: "#1c1c28" }}
+      style={{ bottom: bottomOffset, left: leftOffset, height: collapsed ? "auto" : 380, background: "#1c1c28" }}
     >
       {/* Header — click to collapse/expand, ✕ to close */}
       <div
@@ -175,6 +176,7 @@ function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindow
 export function ChatWidget() {
   const chatOpen = useBoardStore((s) => s.chatOpen);
   const setChatOpen = useBoardStore((s) => s.setChatOpen);
+  const summaryBarHeight = useBoardStore((s) => s.summaryBarHeight);
   const chatHint = useShortcutHint("toggle-chat");
   const [openThreads, setOpenThreads] = useState<string[]>([]);
   const [showNewChat, setShowNewChat] = useState(false);
@@ -283,6 +285,7 @@ export function ChatWidget() {
             key={agentId}
             agentId={agentId}
             leftOffset={450 + index * 330}
+            bottomOffset={summaryBarHeight}
             unread={conv?.unread ?? 0}
             onClose={() => toggleThread(agentId)}
           />
@@ -301,7 +304,7 @@ export function ChatWidget() {
           <div
             ref={overflowRef}
             className="fixed z-40"
-            style={{ bottom: 32, left: 1440 }}
+            style={{ bottom: summaryBarHeight, left: 1440 }}
           >
             {/* Popover — shown above the bar when open */}
             {overflowOpen && (
@@ -352,7 +355,7 @@ export function ChatWidget() {
       })()}
 
       {/* Main widget */}
-      <div className="fixed bottom-8 left-0 w-[440px] z-40">
+      <div className="fixed left-0 w-[440px] z-40" style={{ bottom: summaryBarHeight }}>
         {/* Conversation list panel */}
         {chatOpen && (
           <div

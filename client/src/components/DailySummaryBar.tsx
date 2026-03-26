@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Card, Epic, Feature } from "../api/types";
@@ -23,10 +23,22 @@ function formatDate(iso: string): string {
 export function DailySummaryBar() {
   const summaryExpanded = useBoardStore((s) => s.summaryExpanded);
   const setSummaryExpanded = useBoardStore((s) => s.setSummaryExpanded);
+  const setSummaryBarHeight = useBoardStore((s) => s.setSummaryBarHeight);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [dayOffset, setDayOffset] = useState(0); // 0 = today, -1 = yesterday, etc.
   const toggleHint = useShortcutHint("toggle-summary");
   const prevHint = useShortcutHint("summary-prev");
   const nextHint = useShortcutHint("summary-next");
+
+  // Track this bar's height so ChatWidget can lift itself above it
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setSummaryBarHeight(el.offsetHeight));
+    ro.observe(el);
+    setSummaryBarHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, [setSummaryBarHeight]);
 
   // Listen for keyboard shortcut day navigation events
   useEffect(() => {
@@ -95,7 +107,7 @@ export function DailySummaryBar() {
   };
 
   return (
-    <div className="shrink-0 border-t border-[#1e1e2a] bg-[#0a0a0f]">
+    <div ref={rootRef} className="shrink-0 border-t border-[#1e1e2a] bg-[#0a0a0f]">
       {/* Collapsed bar — always visible */}
       <button
         onClick={() => setSummaryExpanded(!summaryExpanded)}

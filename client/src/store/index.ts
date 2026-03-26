@@ -53,6 +53,10 @@ interface BoardStore {
   summaryExpanded: boolean;
   setSummaryExpanded: (expanded: boolean) => void;
 
+  // Height of the DailySummaryBar (measured via ResizeObserver, used by ChatWidget)
+  summaryBarHeight: number;
+  setSummaryBarHeight: (h: number) => void;
+
   // Ctrl key held (for shortcut hint overlay)
   ctrlHeld: boolean;
   setCtrlHeld: (held: boolean) => void;
@@ -115,6 +119,9 @@ export const useBoardStore = create<BoardStore>((set) => ({
 
   summaryExpanded: false,
   setSummaryExpanded: (expanded) => set({ summaryExpanded: expanded }),
+
+  summaryBarHeight: 0,
+  setSummaryBarHeight: (h) => set({ summaryBarHeight: h }),
 
   ctrlHeld: false,
   setCtrlHeld: (held) => set({ ctrlHeld: held }),
