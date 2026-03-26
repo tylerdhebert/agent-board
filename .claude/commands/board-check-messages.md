@@ -4,7 +4,7 @@ $ARGUMENTS contains your agent id (e.g. `implementer-1`).
 
 ## Steps
 
-1. Poll for pending messages using fuzzy match — messages addressed to any substring of your agent id will be returned:
+1. Poll for pending messages using your exact agent id:
 
 ```
 GET http://localhost:31377/api/queue?agentId=<your-agent-id>&status=pending

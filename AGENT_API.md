@@ -156,20 +156,11 @@ On timeout (HTTP 408):
 
 The board has a bidirectional chat system. The user can send you messages between turns and expects you to read them before doing any work. You can also send replies that appear in the user's chat window.
 
-### Fuzzy agent matching
-
-Messages use a fuzzy pattern match — the message's `agentId` is matched as a substring of your agent id. This means a message addressed to `"implementer"` will be picked up by `"implementer-1"`, `"implementer-frontend"`, or `"implementer"` itself.
-
-Always poll using your **full** agent id:
-```
-GET /queue?agentId=implementer-1&status=pending
-```
-
 ### Check your messages (do this at the start of each turn)
 ```
 GET /queue?agentId=<your-agent-id>&status=pending
 ```
-Returns pending messages addressed to you (via fuzzy match), ordered oldest first. Filter for `status=pending` to only get unread messages.
+Returns pending messages addressed to your exact agent id, ordered oldest first. Your agent id must match exactly — use the id the orchestrator assigned you.
 
 ### Reply to a message / send a message
 ```
