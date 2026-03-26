@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useBoardStore } from "../store";
 import type { KeyboardShortcut } from "../api/types";
+import { escapeStack } from "./useEscapeStack";
 
 function eventToKey(e: KeyboardEvent): string {
   const parts: string[] = [];
@@ -42,9 +43,7 @@ export function useKeyboardShortcuts() {
           store.setAdminPanelOpen(!store.adminPanelOpen);
           break;
         case "close-modal":
-          if (store.openModal) store.setOpenModal(null);
-          else if (store.adminPanelOpen) store.setAdminPanelOpen(false);
-          else store.setChatOpen(false);
+          escapeStack.trigger();
           break;
         case "filter-all":
           store.setHierarchyFilter({ type: "all" });

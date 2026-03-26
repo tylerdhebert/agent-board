@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useBoardStore } from "../store";
+import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { CardsSection } from "./admin/CardsSection";
 import { MoveSection } from "./admin/MoveSection";
 import { StatusesSection } from "./admin/StatusesSection";
@@ -14,6 +15,8 @@ type Section = "cards" | "move" | "statuses" | "epics" | "features" | "rules" | 
 export function AdminPanel() {
   const setAdminPanelOpen = useBoardStore((s) => s.setAdminPanelOpen);
   const [activeSection, setActiveSection] = useState<Section>("cards");
+
+  useEscapeToClose(useCallback(() => setAdminPanelOpen(false), [setAdminPanelOpen]));
 
   return (
     <div

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
+import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { API_BASE } from "../api/client"; // kept: /api/input/:id/answer uses raw fetch (long-poll adjacent)
 import type { InputRequest, Question } from "../api/types";
 import { useCountdown } from "../hooks/useCountdown";
@@ -52,10 +53,12 @@ export function InputModal({ request }: Props) {
     },
   });
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setOpenModal(null);
     setActiveInputRequestId(null);
-  };
+  }, [setOpenModal, setActiveInputRequestId]);
+
+  useEscapeToClose(handleClose);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

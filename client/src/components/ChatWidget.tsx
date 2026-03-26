@@ -5,6 +5,7 @@ import type { QueueMessage, Conversation, Card } from "../api/types";
 import { useBoardStore } from "../store";
 import { useShortcutHint } from "../hooks/useShortcutHint";
 import { ShortcutBadge } from "./ShortcutBadge";
+import { useEscapeToClose } from "../hooks/useEscapeStack";
 
 // ---------------------------------------------------------------------------
 // Thread window — one per open conversation
@@ -22,6 +23,8 @@ function ChatThreadWindow({ agentId, leftOffset, unread, onClose }: ThreadWindow
   const [input, setInput] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEscapeToClose(onClose);
 
   // Fires every time the scroll container mounts (open, uncollapse, reopen)
   const scrollRefCallback = useCallback((el: HTMLDivElement | null) => {

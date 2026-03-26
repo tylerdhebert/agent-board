@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
+import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
 import type { CardWithComments, Status } from "../api/types";
 import { TypeBadge } from "./TypeBadge";
@@ -60,12 +61,14 @@ export function CardModal({ statuses }: Props) {
     },
   });
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setOpenModal(null);
     setSelectedCardId(null);
     setSelectedStatusId(null);
     setShowDeleteConfirm(false);
-  };
+  }, [setOpenModal, setSelectedCardId]);
+
+  useEscapeToClose(handleClose);
 
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatusId = e.target.value;

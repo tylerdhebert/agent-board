@@ -27,7 +27,9 @@ export function CardTile({ card, status }: Props) {
   return (
     <div
       onClick={handleClick}
-      className={`group relative cursor-pointer rounded-sm bg-[#1c1c28] border border-[#2a2a38] hover:border-[#3a3a4a] hover:bg-[#22222e] transition-colors duration-150 p-3.5 ${
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter") handleClick(); }}
+      className={`group relative cursor-pointer rounded-sm bg-[#1c1c28] border border-[#2a2a38] hover:border-[#3a3a4a] hover:bg-[#22222e] transition-colors duration-150 p-3.5 focus:outline-none focus:ring-1 focus:ring-[#3a3a4a] ${
         isPulsing ? "card-pulse" : ""
       } ${hasUnseenComment ? "card-comment-glow" : ""}`}
       style={{
