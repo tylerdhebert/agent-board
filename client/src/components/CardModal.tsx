@@ -5,6 +5,7 @@ import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
 import type { CardWithComments, Status } from "../api/types";
 import { TypeBadge } from "./TypeBadge";
+import { DiffModal } from "./DiffModal";
 
 interface Props {
   statuses: Status[];
@@ -19,6 +20,8 @@ export function CardModal({ statuses }: Props) {
   const [commentBody, setCommentBody] = useState("");
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
 
   const { data: card, isLoading } = useQuery<CardWithComments>({
     queryKey: ["card", selectedCardId],
@@ -61,11 +64,33 @@ export function CardModal({ statuses }: Props) {
     },
   });
 
+  const mergeMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await api.api.cards({ id: selectedCardId! }).merge.post({});
+      if (error) {
+        const val = (error as any).value;
+        if (val?.conflict) throw new Error(val.message ?? "Merge conflict");
+        throw new Error(val?.error ?? "Merge failed");
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["card", selectedCardId] });
+      handleClose();
+    },
+    onError: (err: Error) => {
+      setMergeError(err.message);
+    },
+  });
+
   const handleClose = useCallback(() => {
     setOpenModal(null);
     setSelectedCardId(null);
     setSelectedStatusId(null);
     setShowDeleteConfirm(false);
+    setShowDiff(false);
+    setMergeError(null);
   }, [setOpenModal, setSelectedCardId]);
 
   useEscapeToClose(handleClose);
@@ -84,8 +109,11 @@ export function CardModal({ statuses }: Props) {
 
   const currentStatusId = selectedStatusId ?? card?.statusId;
   const currentStatus = statuses.find((s) => s.id === currentStatusId);
+  const cardStatus = statuses.find((s) => s.id === card?.statusId);
+  const isReadyToMerge = cardStatus?.name.toLowerCase() === "ready to merge";
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={handleClose}
@@ -157,6 +185,41 @@ export function CardModal({ statuses }: Props) {
                     {card?.agentId ?? "—"}
                   </span>
                 </div>
+                {card?.branchName && (
+                  <div className="col-span-2">
+                    <span className="text-[#475569] font-mono uppercase tracking-wider block mb-1">
+                      Branch
+                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#818cf8] bg-[#1a1a2e] px-2 py-0.5 rounded-sm border border-[#2a2a4a]">
+                        ⎇ {card.branchName}
+                      </span>
+                      <button
+                        onClick={() => setShowDiff(true)}
+                        className="px-2 py-0.5 bg-[#1a1a2e] border border-[#2a2a4a] hover:border-[#818cf8] text-[#818cf8] font-mono text-[11px] rounded-sm transition-colors"
+                      >
+                        View Diff
+                      </button>
+                      {isReadyToMerge && (
+                        <button
+                          onClick={() => {
+                            setMergeError(null);
+                            mergeMutation.mutate();
+                          }}
+                          disabled={mergeMutation.isPending}
+                          className="px-2 py-0.5 bg-[#1a2e1a] border border-[#2a4a2a] hover:border-[#4ade80] disabled:opacity-50 text-[#4ade80] font-mono text-[11px] rounded-sm transition-colors"
+                        >
+                          {mergeMutation.isPending ? "Merging..." : "Merge"}
+                        </button>
+                      )}
+                    </div>
+                    {mergeError && (
+                      <p className="mt-1.5 text-[11px] font-mono text-[#f87171] leading-relaxed">
+                        {mergeError}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div>
                   <span className="text-[#475569] font-mono uppercase tracking-wider block mb-1">
                     Created
@@ -284,6 +347,16 @@ export function CardModal({ statuses }: Props) {
         </div>
       </div>
     </div>
+
+    {showDiff && card?.branchName && (
+      <DiffModal
+        cardId={card.id}
+        cardTitle={card.title}
+        branchName={card.branchName}
+        onClose={() => setShowDiff(false)}
+      />
+    )}
+    </>
   );
 }
 

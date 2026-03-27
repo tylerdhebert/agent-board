@@ -11,6 +11,7 @@ import { inputRoutes } from "./routes/input";
 import { transitionRuleRoutes } from "./routes/transitionRules";
 import { queueRoutes } from "./routes/queue";
 import { shortcutRoutes } from "./routes/shortcuts";
+import { worktreeRoutes } from "./routes/worktrees";
 
 // Bootstrap database on startup
 initDb();
@@ -68,6 +69,7 @@ export const app = new Elysia()
       .use(transitionRuleRoutes)
       .use(queueRoutes)
       .use(shortcutRoutes)
+      .use(worktreeRoutes)
   );
 
 export type App = typeof app;

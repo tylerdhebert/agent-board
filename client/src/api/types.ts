@@ -36,6 +36,7 @@ export interface Card {
   description: string;
   statusId: string;
   agentId: string | null;
+  branchName?: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;

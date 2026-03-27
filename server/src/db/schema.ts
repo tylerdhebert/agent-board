@@ -65,6 +65,7 @@ export const cards = sqliteTable("cards", {
     .notNull()
     .references(() => statuses.id),
   agentId: text("agent_id"),
+  branchName: text("branch_name"),
   completedAt: text("completed_at"),
   createdAt: text("created_at")
     .notNull()

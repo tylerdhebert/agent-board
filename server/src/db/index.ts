@@ -65,6 +65,7 @@ export function initDb() {
       description TEXT NOT NULL DEFAULT '',
       status_id TEXT NOT NULL REFERENCES statuses(id),
       agent_id TEXT,
+      branch_name TEXT,
       completed_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -156,9 +157,10 @@ export function initDb() {
       { id: randomUUID(), name: "To Do", color: "#64748b", position: 0 },
       { id: randomUUID(), name: "In Progress", color: "#3b82f6", position: 1 },
       { id: randomUUID(), name: "In Review", color: "#a855f7", position: 2 },
-      { id: randomUUID(), name: "Needs Revision", color: "#f59e0b", position: 3 },
-      { id: randomUUID(), name: "Blocked", color: "#ef4444", position: 4 },
-      { id: randomUUID(), name: "Done", color: "#22c55e", position: 5 },
+      { id: randomUUID(), name: "Ready to Merge", color: "#f97316", position: 3 },
+      { id: randomUUID(), name: "Needs Revision", color: "#f59e0b", position: 4 },
+      { id: randomUUID(), name: "Blocked", color: "#ef4444", position: 5 },
+      { id: randomUUID(), name: "Done", color: "#22c55e", position: 6 },
     ];
     for (const s of seed) {
       db.insert(statuses).values(s).run();

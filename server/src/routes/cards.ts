@@ -4,6 +4,7 @@ import { cards, comments, statuses, transitionRules } from "../db/schema";
 import { eq, like } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
+import { getRepoPath, git, worktreePath } from "../git";
 
 function agentPatternMatch(pattern: string, agentId: string): boolean {
   // Simple wildcard: * matches anything
@@ -237,6 +238,128 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       return { success: true };
     },
     { params: t.Object({ id: t.String() }) }
+  )
+  // Get diff for a card's branch vs main
+  .get(
+    "/:id/diff",
+    ({ params, set }) => {
+      const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
+      if (!card) throw new Error("Not found");
+
+      if (!card.branchName) {
+        set.status = 400;
+        return { error: "Card has no branch" };
+      }
+
+      let repoPath: string;
+      try {
+        repoPath = getRepoPath();
+      } catch {
+        set.status = 500;
+        return { error: "REPO_PATH not configured" };
+      }
+
+      const diffResult = git(["diff", `main...${card.branchName}`], repoPath);
+      const statResult = git(["diff", "--stat", `main...${card.branchName}`], repoPath);
+
+      return {
+        diff: diffResult.stdout,
+        stat: statResult.stdout,
+        branchName: card.branchName,
+      };
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+  // Merge a card's branch into a target branch
+  .post(
+    "/:id/merge",
+    ({ params, body, set }) => {
+      const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
+      if (!card) throw new Error("Not found");
+
+      if (!card.branchName) {
+        set.status = 400;
+        return { error: "Card has no branch" };
+      }
+
+      let repoPath: string;
+      try {
+        repoPath = getRepoPath();
+      } catch {
+        set.status = 500;
+        return { error: "REPO_PATH not configured" };
+      }
+
+      const targetBranch = body.targetBranch ?? "main";
+      const strategy = body.strategy ?? "merge";
+      const branchName = card.branchName;
+
+      // Checkout target branch
+      const checkoutResult = git(["checkout", targetBranch], repoPath);
+      if (checkoutResult.exitCode !== 0) {
+        set.status = 409;
+        return { conflict: true, message: checkoutResult.stderr };
+      }
+
+      // Merge
+      const mergeArgs =
+        strategy === "squash"
+          ? ["merge", "--squash", branchName]
+          : ["merge", branchName];
+      const mergeResult = git(mergeArgs, repoPath);
+      if (mergeResult.exitCode !== 0) {
+        set.status = 409;
+        return { conflict: true, message: mergeResult.stderr };
+      }
+
+      // If squash, need an explicit commit
+      if (strategy === "squash") {
+        const commitResult = git(
+          ["commit", "-m", `Squash merge: ${branchName}`],
+          repoPath
+        );
+        if (commitResult.exitCode !== 0) {
+          set.status = 409;
+          return { conflict: true, message: commitResult.stderr };
+        }
+      }
+
+      // Cleanup: remove worktree and delete branch
+      const wtPath = worktreePath(branchName);
+      git(["worktree", "remove", "--force", wtPath], repoPath);
+      git(["branch", "-D", branchName], repoPath);
+
+      // Find "Done" status
+      const doneStatus = db
+        .select()
+        .from(statuses)
+        .all()
+        .find((s) => s.name.toLowerCase() === "done");
+
+      // Update card: set to Done, clear branch_name, set completedAt
+      const now = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        branchName: null,
+        updatedAt: now,
+        completedAt: now,
+      };
+      if (doneStatus) patch.statusId = doneStatus.id;
+
+      db.update(cards).set(patch).where(eq(cards.id, params.id)).run();
+      const updated = db.select().from(cards).where(eq(cards.id, params.id)).get();
+      if (updated) {
+        wsManager.broadcast("card:updated", updated);
+      }
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        strategy: t.Optional(t.Union([t.Literal("merge"), t.Literal("squash")])),
+        targetBranch: t.Optional(t.String()),
+      }),
+    }
   )
   // Post comment on card
   .post(
