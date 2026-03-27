@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import type { Card, Epic, Feature } from "../../api/types";
+import type { Card, Epic, Feature, Workflow } from "../../api/types";
 
 export function EpicsSection() {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [workflowId, setWorkflowId] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { data: epics = [] } = useQuery<Epic[]>({
@@ -27,6 +28,15 @@ export function EpicsSection() {
     staleTime: 30_000,
   });
 
+  const { data: workflows = [] } = useQuery<Workflow[]>({
+    queryKey: ["workflows"],
+    queryFn: async () => {
+      const { data } = await api.api.workflows.get();
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
   const { data: cards = [] } = useQuery<Card[]>({
     queryKey: ["cards"],
     queryFn: async () => {
@@ -38,12 +48,18 @@ export function EpicsSection() {
 
   const createEpicMutation = useMutation({
     mutationFn: async () => {
-      const { data } = await api.api.epics.post({ title: title.trim(), description: description.trim() });
+      const body: { title: string; description?: string; workflowId?: string } = {
+        title: title.trim(),
+      };
+      if (description.trim()) body.description = description.trim();
+      if (workflowId) body.workflowId = workflowId;
+      const { data } = await api.api.epics.post(body);
       return data!;
     },
     onSuccess: () => {
       setTitle("");
       setDescription("");
+      setWorkflowId("");
       queryClient.invalidateQueries({ queryKey: ["epics"] });
     },
   });
@@ -94,6 +110,18 @@ export function EpicsSection() {
             placeholder="Description (optional)"
             className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors"
           />
+          <select
+            value={workflowId}
+            onChange={(e) => setWorkflowId(e.target.value)}
+            className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] transition-colors cursor-pointer"
+          >
+            <option value="">Workflow (optional)</option>
+            {workflows.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name} ({w.type})
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             disabled={!title.trim() || createEpicMutation.isPending}
@@ -123,7 +151,21 @@ export function EpicsSection() {
                   className="bg-[#0d0d14] border border-[#1e1e2a] rounded-sm px-3 py-2 flex items-start gap-3"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-mono text-[#e2e8f0]">{epic.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[12px] font-mono text-[#e2e8f0]">{epic.title}</p>
+                      {epic.workflowId && (() => {
+                        const wf = workflows.find((w) => w.id === epic.workflowId);
+                        return wf ? (
+                          <span className="text-[10px] font-mono px-1 py-0.5 rounded-sm border"
+                            style={wf.type === "worktree"
+                              ? { color: "#818cf8", borderColor: "#3a3a5a", backgroundColor: "#1a1a2e" }
+                              : { color: "#475569", borderColor: "#2a2a38", backgroundColor: "#1a1a24" }}
+                          >
+                            {wf.name}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
                     {epic.description && (
                       <p className="text-[11px] font-mono text-[#475569] mt-0.5 truncate">
                         {epic.description}

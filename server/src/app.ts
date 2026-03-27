@@ -12,6 +12,9 @@ import { transitionRuleRoutes } from "./routes/transitionRules";
 import { queueRoutes } from "./routes/queue";
 import { shortcutRoutes } from "./routes/shortcuts";
 import { worktreeRoutes } from "./routes/worktrees";
+import { repoRoutes } from "./routes/repos";
+import { workflowRoutes } from "./routes/workflows";
+import { fsRoutes } from "./routes/fs";
 
 // Bootstrap database on startup
 initDb();
@@ -70,6 +73,9 @@ export const app = new Elysia()
       .use(queueRoutes)
       .use(shortcutRoutes)
       .use(worktreeRoutes)
+      .use(repoRoutes)
+      .use(workflowRoutes)
+      .use(fsRoutes)
   );
 
 export type App = typeof app;

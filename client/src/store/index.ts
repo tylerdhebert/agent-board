@@ -7,8 +7,7 @@ type WsStatus = "connecting" | "connected" | "disconnected";
 export type HierarchyFilter =
   | { type: "all" }
   | { type: "epic"; id: string }
-  | { type: "feature"; id: string }
-  | { type: "unassigned" };
+  | { type: "feature"; id: string };
 
 interface BoardStore {
   // Selected card
@@ -36,6 +35,10 @@ interface BoardStore {
   pulsingCardIds: Set<string>;
   addPulsingCard: (cardId: string) => void;
   removePulsingCard: (cardId: string) => void;
+
+  // Selected epic for board view (separate from hierarchyFilter)
+  selectedEpicId: string | null;
+  setSelectedEpicId: (id: string | null) => void;
 
   // Hierarchy sidebar filter
   hierarchyFilter: HierarchyFilter;
@@ -107,6 +110,9 @@ export const useBoardStore = create<BoardStore>((set) => ({
       next.delete(cardId);
       return { pulsingCardIds: next };
     }),
+
+  selectedEpicId: null,
+  setSelectedEpicId: (id) => set({ selectedEpicId: id }),
 
   hierarchyFilter: { type: "all" },
   setHierarchyFilter: (filter) => set({ hierarchyFilter: filter }),

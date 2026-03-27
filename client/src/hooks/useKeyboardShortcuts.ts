@@ -48,9 +48,7 @@ export function useKeyboardShortcuts() {
         case "filter-all":
           store.setHierarchyFilter({ type: "all" });
           break;
-        case "filter-unassigned":
-          store.setHierarchyFilter({ type: "unassigned" });
-          break;
+
         case "toggle-chat":
           store.setChatOpen(!store.chatOpen);
           break;

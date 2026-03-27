@@ -1,10 +1,10 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards, comments, statuses, transitionRules } from "../db/schema";
+import { cards, comments, statuses, transitionRules, repos, features } from "../db/schema";
 import { eq, like } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
-import { getRepoPath, git, worktreePath } from "../git";
+import { git, worktreePath } from "../git";
 
 function agentPatternMatch(pattern: string, agentId: string): boolean {
   // Simple wildcard: * matches anything
@@ -122,13 +122,18 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
   // Create card
   .post(
     "/",
-    ({ body }) => {
+    ({ body, set }) => {
+      const feature = db.select().from(features).where(eq(features.id, body.featureId)).get();
+      if (!feature) {
+        set.status = 400;
+        return { error: "Feature not found" };
+      }
       const id = randomUUID();
       const now = new Date().toISOString();
       const row = {
         id,
-        featureId: body.featureId ?? null,
-        epicId: body.epicId ?? null,
+        featureId: body.featureId,
+        epicId: feature.epicId,
         type: body.type ?? "task",
         title: body.title,
         description: body.description ?? "",
@@ -150,12 +155,11 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       body: t.Object({
         title: t.String(),
         statusId: t.String(),
+        featureId: t.String(),
         type: t.Optional(
           t.Union([t.Literal("story"), t.Literal("bug"), t.Literal("task")])
         ),
         description: t.Optional(t.String()),
-        featureId: t.Optional(t.String()),
-        epicId: t.Optional(t.String()),
         agentId: t.Optional(t.String()),
       }),
     }
@@ -251,16 +255,19 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         return { error: "Card has no branch" };
       }
 
-      let repoPath: string;
-      try {
-        repoPath = getRepoPath();
-      } catch {
-        set.status = 500;
-        return { error: "REPO_PATH not configured" };
+      if (!card.repoId) {
+        set.status = 400;
+        return { error: "Card has no repo associated" };
       }
 
-      const diffResult = git(["diff", `main...${card.branchName}`], repoPath);
-      const statResult = git(["diff", "--stat", `main...${card.branchName}`], repoPath);
+      const repo = db.select().from(repos).where(eq(repos.id, card.repoId)).get();
+      if (!repo) {
+        set.status = 400;
+        return { error: "Card has no repo associated" };
+      }
+
+      const diffResult = git(["diff", `${repo.baseBranch}...${card.branchName}`], repo.path);
+      const statResult = git(["diff", "--stat", `${repo.baseBranch}...${card.branchName}`], repo.path);
 
       return {
         diff: diffResult.stdout,
@@ -282,15 +289,19 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         return { error: "Card has no branch" };
       }
 
-      let repoPath: string;
-      try {
-        repoPath = getRepoPath();
-      } catch {
-        set.status = 500;
-        return { error: "REPO_PATH not configured" };
+      if (!card.repoId) {
+        set.status = 400;
+        return { error: "Card has no repo associated" };
       }
 
-      const targetBranch = body.targetBranch ?? "main";
+      const repo = db.select().from(repos).where(eq(repos.id, card.repoId)).get();
+      if (!repo) {
+        set.status = 400;
+        return { error: "Card has no repo associated" };
+      }
+
+      const repoPath = repo.path;
+      const targetBranch = body.targetBranch ?? repo.baseBranch;
       const strategy = body.strategy ?? "merge";
       const branchName = card.branchName;
 
@@ -325,7 +336,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       }
 
       // Cleanup: remove worktree and delete branch
-      const wtPath = worktreePath(branchName);
+      const wtPath = worktreePath(repoPath, branchName);
       git(["worktree", "remove", "--force", wtPath], repoPath);
       git(["branch", "-D", branchName], repoPath);
 

@@ -3,15 +3,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
-import type { CardWithComments, Status } from "../api/types";
+import type { CardWithComments, Status, WorkflowStatus } from "../api/types";
 import { TypeBadge } from "./TypeBadge";
 import { DiffModal } from "./DiffModal";
 
 interface Props {
   statuses: Status[];
+  workflowStatuses?: WorkflowStatus[];
 }
 
-export function CardModal({ statuses }: Props) {
+export function CardModal({ statuses, workflowStatuses }: Props) {
   const queryClient = useQueryClient();
   const selectedCardId = useBoardStore((s) => s.selectedCardId);
   const setOpenModal = useBoardStore((s) => s.setOpenModal);
@@ -110,7 +111,10 @@ export function CardModal({ statuses }: Props) {
   const currentStatusId = selectedStatusId ?? card?.statusId;
   const currentStatus = statuses.find((s) => s.id === currentStatusId);
   const cardStatus = statuses.find((s) => s.id === card?.statusId);
-  const isReadyToMerge = cardStatus?.name.toLowerCase() === "ready to merge";
+  // Prefer triggersMerge from workflow statuses; fall back to name check
+  const isReadyToMerge = workflowStatuses
+    ? workflowStatuses.some((ws) => ws.statusId === card?.statusId && ws.triggersMerge)
+    : cardStatus?.name.toLowerCase() === "ready to merge";
 
   return (
     <>

@@ -2,22 +2,12 @@ import { join } from "path";
 
 const decoder = new TextDecoder();
 
-export function getRepoPath(): string {
-  const repoPath = process.env.REPO_PATH;
-  if (!repoPath) {
-    throw new Error(
-      "REPO_PATH environment variable is not set. Set it to the absolute path of the git repository."
-    );
-  }
-  return repoPath;
-}
-
 export function git(
   args: string[],
-  cwd?: string
+  cwd: string
 ): { stdout: string; stderr: string; exitCode: number } {
   const proc = Bun.spawnSync(["git", ...args], {
-    cwd: cwd ?? getRepoPath(),
+    cwd,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -28,6 +18,6 @@ export function git(
   };
 }
 
-export function worktreePath(branchName: string): string {
-  return join(getRepoPath(), "..", ".git-worktrees", branchName);
+export function worktreePath(repoPath: string, branchName: string): string {
+  return join(repoPath, "..", ".git-worktrees", branchName);
 }

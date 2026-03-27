@@ -9,8 +9,10 @@ import { FeaturesSection } from "./admin/FeaturesSection";
 import { RulesSection } from "./admin/RulesSection";
 import { DangerSection } from "./admin/DangerSection";
 import { ShortcutsSection } from "./admin/ShortcutsSection";
+import { ReposSection } from "./admin/ReposSection";
+import { WorkflowsSection } from "./admin/WorkflowsSection";
 
-type Section = "cards" | "move" | "statuses" | "epics" | "features" | "rules" | "shortcuts" | "danger";
+type Section = "cards" | "move" | "statuses" | "epics" | "features" | "rules" | "shortcuts" | "repos" | "workflows" | "danger";
 
 export function AdminPanel() {
   const setAdminPanelOpen = useBoardStore((s) => s.setAdminPanelOpen);
@@ -47,7 +49,7 @@ export function AdminPanel() {
           {/* Sidenav */}
           <nav className="w-36 shrink-0 border-r border-[#1e1e2a] flex flex-col py-2 overflow-y-auto">
             <div className="flex-1 flex flex-col">
-              {(["cards", "move", "statuses", "epics", "features", "rules", "shortcuts"] as Section[]).map((s) => (
+              {(["statuses", "workflows", "repos", "epics", "features", "cards", "move", "rules", "shortcuts"] as Section[]).map((s) => (
                 <button
                   key={s}
                   onClick={() => setActiveSection(s)}
@@ -84,6 +86,8 @@ export function AdminPanel() {
             {activeSection === "features" && <FeaturesSection />}
             {activeSection === "rules" && <RulesSection />}
             {activeSection === "shortcuts" && <ShortcutsSection />}
+            {activeSection === "repos" && <ReposSection />}
+            {activeSection === "workflows" && <WorkflowsSection />}
             {activeSection === "danger" && <DangerSection />}
           </div>
         </div>

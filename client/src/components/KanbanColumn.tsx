@@ -1,25 +1,34 @@
-import type { Card, Status } from "../api/types";
+import type { Card, WorkflowStatus } from "../api/types";
 import { CardTile } from "./CardTile";
 
 interface Props {
-  status: Status;
+  workflowStatus: WorkflowStatus;
   cards: Card[];
 }
 
-export function KanbanColumn({ status, cards }: Props) {
+export function KanbanColumn({ workflowStatus, cards }: Props) {
+  // Build a Status-like object for CardTile (which still expects { id, name, color })
+  const statusForTile = {
+    id: workflowStatus.statusId,
+    name: workflowStatus.name,
+    color: workflowStatus.color,
+    position: workflowStatus.position,
+    createdAt: "",
+  };
+
   return (
     <div className="flex flex-col min-w-[260px] max-w-[300px] w-full bg-[#0d0d14] rounded-sm border border-[#1e1e2a]">
       {/* Column header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 border-b border-[#1e1e2a]"
-        style={{ borderTop: `2px solid ${status.color}` }}
+        style={{ borderTop: `2px solid ${workflowStatus.color}` }}
       >
         <span
           className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: status.color }}
+          style={{ backgroundColor: workflowStatus.color }}
         />
         <span className="text-xs font-mono font-semibold text-[#cbd5e1] uppercase tracking-wider">
-          {status.name}
+          {workflowStatus.name}
         </span>
         <span className="ml-auto text-[10px] font-mono text-[#475569] bg-[#1a1a24] px-1.5 py-0.5 rounded">
           {cards.length}
@@ -34,7 +43,7 @@ export function KanbanColumn({ status, cards }: Props) {
           </div>
         ) : (
           cards.map((card) => (
-            <CardTile key={card.id} card={card} status={status} />
+            <CardTile key={card.id} card={card} status={statusForTile} />
           ))
         )}
       </div>

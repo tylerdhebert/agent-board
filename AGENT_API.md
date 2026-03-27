@@ -71,9 +71,7 @@ PATCH /cards/:id
   "agentId": "implementer-1",
   "title": "...",
   "description": "...",
-  "type": "task|story|bug",
-  "epicId": "<id or null>",
-  "featureId": "<id or null>"
+  "type": "task|story|bug"
 }
 ```
 All fields are optional. When changing status, include your `agentId` so transition rules are enforced. If a move is not permitted, the server returns an error.
@@ -83,14 +81,14 @@ All fields are optional. When changing status, include your `agentId` so transit
 POST /cards
 {
   "title": "Fix login bug",
+  "featureId": "<id>",
   "statusId": "<To Do status ID>",
   "type": "bug",
   "description": "...",
-  "agentId": "implementer-1",
-  "epicId": "<id>",
-  "featureId": "<id>"
+  "agentId": "implementer-1"
 }
 ```
+`featureId` is **required** — every card must belong to a feature. `epicId` is derived automatically from the feature. Use `GET /epics` then `GET /features` to resolve IDs.
 
 ### Delete a card
 ```
@@ -250,9 +248,11 @@ POST /epics
 {
   "title": "Authentication Overhaul",
   "description": "...",
-  "statusId": "<id>"
+  "statusId": "<id>",
+  "workflowId": "<id>"
 }
 ```
+`workflowId` is optional. Use `GET /workflows` to list available workflows (`"workflow-default"` for standard boards, `"workflow-worktree"` for git-integrated boards).
 
 ### Update an epic
 ```
@@ -263,6 +263,8 @@ PATCH /epics/:id
 ---
 
 ## Features
+
+Features belong to an epic and can optionally be linked to a repo and branch. The commit panel on the board shows commits for each feature's branch.
 
 ### List all features
 ```
@@ -276,15 +278,165 @@ POST /features
   "epicId": "<id>",
   "title": "JWT Token Issuance",
   "description": "...",
-  "statusId": "<id>"
+  "statusId": "<id>",
+  "repoId": "<repo id>",
+  "branchName": "feat/jwt-issuance"
 }
 ```
+`repoId` and `branchName` are optional. When set, the feature's commit history is shown in the board's right panel (commits ahead of `repo.baseBranch`).
 
 ### Update a feature
 ```
 PATCH /features/:id
-{ "title": "...", "description": "...", "statusId": "<id>" }
+{ "title": "...", "description": "...", "statusId": "<id>", "repoId": "<id>", "branchName": "feat/..." }
 ```
+
+### Get commit history for a feature's branch
+```
+GET /features/:id/commits
+```
+Returns up to 50 commits on `feature.branchName` that are not on `repo.baseBranch`. Requires `repoId` and `branchName` to be set on the feature.
+
+### Get a specific commit diff
+```
+GET /features/:id/commits/:hash
+```
+Returns `{ hash, author, subject, date, diff }`.
+
+---
+
+## Repos
+
+Repos represent git repositories that agents can create worktrees in. Managed via the admin panel.
+
+### List all repos
+```
+GET /repos
+```
+Returns `[{ id, name, path, baseBranch, compareBase }]`. `baseBranch` is the trunk branch (e.g. `main`) used as the comparison base for feature commit ranges. `compareBase` is a legacy field; feature branches now use `baseBranch` as their base automatically.
+
+---
+
+## Worktrees
+
+Worktrees allow agents to work on isolated git branches. The orchestrator sets everything up; the sub-agent just works in the provided directory.
+
+### Orchestrator setup sequence
+
+When kicking off a worktree-based task, the orchestrator should:
+
+**1. Resolve the repo**
+```
+GET /repos
+```
+Find the repo matching the codebase the agent will work in. Note its `id` and `baseBranch` (the trunk, e.g. `main`).
+
+**2. Create the feature (if it doesn't exist) with repo + branch info**
+```
+POST /features
+{
+  "epicId": "<epic id>",
+  "title": "My Feature",
+  "repoId": "<repo id>",
+  "branchName": "feat/my-feature"
+}
+```
+This links the feature to the branch so commit history appears in the UI. Use a descriptive branch name scoped to the feature (e.g. `feat/auth-jwt`, `fix/login-bug`).
+
+**3. Create a card for the agent**
+```
+POST /cards
+{
+  "featureId": "<feature id>",
+  "title": "Implement JWT issuance",
+  "type": "task",
+  "statusId": "<To Do id>",
+  "agentId": "implementer-1"
+}
+```
+
+**4. Create the worktree**
+```
+POST /worktrees
+{
+  "cardId": "<card id>",
+  "repoId": "<repo id>",
+  "branchName": "feat/my-feature",
+  "baseBranch": "main"
+}
+```
+This runs `git worktree add -b feat/my-feature` in the repo directory and stamps `branchName` + `repoId` on the card. The response includes the `worktreePath` — the absolute directory the agent should work in.
+
+**5. Spawn the sub-agent with the worktree path**
+Pass `worktreePath` from the response as the working directory for the sub-agent. Tell the agent:
+- The card ID to claim
+- The worktree path to work in
+- The branch name (for commit messages, PR context, etc.)
+- The repo's `baseBranch` so they know what they're branching from
+
+### Sub-agent responsibilities
+
+Once inside a worktree, the agent should:
+1. Claim the card: `POST /cards/:id/claim`
+2. Do the work in the provided `worktreePath` — all changes are isolated to this branch
+3. Post comments on the card as work progresses
+4. When done, move the card to "Ready to Merge" (or equivalent) — **do not merge the branch yourself**. Merging is a human action performed in the UI.
+
+### Teardown (orchestrator)
+
+After the user merges or abandons the branch:
+```
+DELETE /worktrees/:branchName?repoId=<id>
+```
+Runs `git worktree remove --force` and `git branch -D`. Clears `branchName` from the card.
+
+### View a card's diff
+```
+GET /cards/:id/diff
+```
+Returns `{ diff, stat, branchName }` — the full diff of the branch against its base. Useful for orchestrators reviewing work before signalling it's ready.
+
+---
+
+## Workflows
+
+### List all workflows
+```
+GET /workflows
+```
+Returns `[{ id, name, type }]`. Two are seeded: `"workflow-default"` (standard) and `"workflow-worktree"` (includes Ready to Merge with `triggersMerge: true`).
+
+### List statuses for a workflow
+```
+GET /workflows/:id/statuses
+```
+Returns `[{ id, workflowId, statusId, position, triggersMerge, name, color }]` — the ordered columns for that workflow.
+
+### Add a status to a workflow
+```
+POST /workflows/:id/statuses
+{ "statusId": "<status id>", "triggersMerge": false }
+```
+Appends the status at the end of the workflow. `triggersMerge` is optional (default false).
+
+### Remove a status from a workflow
+```
+DELETE /workflows/:id/statuses/:wsId
+```
+`:wsId` is the `id` field from the workflow status row (not the status id).
+
+### Reorder a workflow status
+```
+PATCH /workflows/:id/statuses/:wsId/position
+{ "position": 2 }
+```
+
+### Toggle merge trigger
+```
+PATCH /workflows/:id/statuses/:wsId/merge
+{ "triggersMerge": true }
+```
+Marks a status as the merge point in the UI. The actual merge is performed by the user — agents should move the card to this status to signal readiness, not attempt to merge directly.
 
 ---
 

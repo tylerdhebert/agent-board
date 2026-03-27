@@ -1,9 +1,10 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { epics, features, cards } from "../db/schema";
+import { epics, features, cards, repos } from "../db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
+import { git } from "../git";
 
 export const epicRoutes = new Elysia({ prefix: "/epics" })
   .get("/", () => {
@@ -29,6 +30,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
         title: t.String(),
         description: t.Optional(t.String()),
         statusId: t.Optional(t.String()),
+        workflowId: t.Optional(t.String()),
       }),
     }
   )
@@ -90,4 +92,70 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
       return { success: true };
     },
     { params: t.Object({ id: t.String() }) }
+  )
+  // Get commit log for a repo, scoped to an epic context
+  .get(
+    "/:id/commits",
+    ({ params, query, set }) => {
+      const repo = db.select().from(repos).where(eq(repos.id, query.repoId)).get();
+      if (!repo) {
+        set.status = 400;
+        return { error: "Repo not found" };
+      }
+
+      const range = repo.compareBase
+        ? `${repo.compareBase}..${repo.baseBranch}`
+        : repo.baseBranch;
+      const result = git(
+        ["log", range, "--format=%H|%ae|%s|%ai", "-50"],
+        repo.path
+      );
+
+      const commits = result.stdout
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const [hash, author, subject, date] = line.split("|");
+          return { hash, author, subject, date };
+        });
+
+      return commits;
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      query: t.Object({ repoId: t.String() }),
+    }
+  )
+  // Get a specific commit diff
+  .get(
+    "/:id/commits/:hash",
+    ({ params, query, set }) => {
+      const repo = db.select().from(repos).where(eq(repos.id, query.repoId)).get();
+      if (!repo) {
+        set.status = 400;
+        return { error: "Repo not found" };
+      }
+
+      const result = git(
+        ["show", params.hash, "--format=%H|%ae|%s|%ai", "--patch"],
+        repo.path
+      );
+
+      const stdout = result.stdout;
+      const diffMarker = "diff --git";
+      const diffIndex = stdout.indexOf(diffMarker);
+      const header = diffIndex === -1 ? stdout : stdout.slice(0, diffIndex);
+      const diff = diffIndex === -1 ? "" : stdout.slice(diffIndex);
+
+      // Parse header: first non-empty line contains the format string
+      const headerLine = header.trim().split("\n").find(l => l.includes("|")) ?? "";
+      const [hash, author, subject, date] = headerLine.split("|");
+
+      return { hash, author, subject, date, diff };
+    },
+    {
+      params: t.Object({ id: t.String(), hash: t.String() }),
+      query: t.Object({ repoId: t.String() }),
+    }
   );

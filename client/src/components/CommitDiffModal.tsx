@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
+import type { Commit, CommitDetail } from "../api/types";
 
-interface DiffModalProps {
-  cardId: string;
-  cardTitle: string;
-  branchName: string;
+interface Props {
+  featureId: string;
+  commit: Commit;
   onClose: () => void;
-}
-
-interface DiffData {
-  diff: string;
-  stat: string;
-  branchName: string;
 }
 
 interface FileDiff {
@@ -49,8 +43,18 @@ function basename(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
-export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalProps) {
-  const [data, setData] = useState<DiffData | null>(null);
+function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+export function CommitDiffModal({ featureId, commit, onClose }: Props) {
+  const [data, setData] = useState<CommitDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -63,23 +67,22 @@ export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalP
     setLoading(true);
     setError(null);
 
-    api.api.cards({ id: cardId }).diff.get().then(({ data, error }) => {
+    (api.api.features({ id: featureId }) as any).commits({ hash: commit.hash }).get().then(({ data: detail, error: err }: any) => {
       if (cancelled) return;
-      if (error) {
-        setError((error as any).value?.error ?? "Failed to load diff");
+      if (err) {
+        setError((err as any).value?.error ?? "Failed to load commit diff");
         setLoading(false);
       } else {
-        setData(data as DiffData);
+        setData(detail as CommitDetail);
         setLoading(false);
       }
     });
 
     return () => { cancelled = true; };
-  }, [cardId]);
+  }, [featureId, commit.hash]);
 
   const files = data ? parseDiff(data.diff) : [];
 
-  // Auto-select first file when data loads
   useEffect(() => {
     if (files.length > 0 && !selectedPath) {
       setSelectedPath(files[0].path);
@@ -103,15 +106,17 @@ export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalP
           <div className="flex-1 min-w-0 pr-4">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-mono text-[#818cf8] bg-[#1a1a2e] px-2 py-0.5 rounded-sm border border-[#2a2a4a]">
-                ⎇ {branchName}
+                {commit.hash.slice(0, 8)}
               </span>
+              <span className="text-[10px] font-mono text-[#475569]">{commit.author}</span>
+              <span className="text-[10px] font-mono text-[#334155]">{formatTimestamp(commit.date)}</span>
               {!loading && files.length > 0 && (
                 <span className="text-[10px] font-mono text-[#475569]">
                   {files.length} file{files.length !== 1 ? "s" : ""}
                 </span>
               )}
             </div>
-            <h2 className="text-sm font-semibold text-[#e2e8f0] leading-snug">{cardTitle}</h2>
+            <h2 className="text-sm font-semibold text-[#e2e8f0] leading-snug">{commit.subject}</h2>
           </div>
           <button
             onClick={handleClose}

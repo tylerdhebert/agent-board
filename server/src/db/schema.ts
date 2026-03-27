@@ -15,6 +15,40 @@ export const statuses = sqliteTable("statuses", {
 });
 
 // ---------------------------------------------------------------------------
+// workflows
+// ---------------------------------------------------------------------------
+export const workflows = sqliteTable("workflows", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("default"), // "default" | "worktree"
+  createdAt: text("created_at").notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// workflow_statuses
+// ---------------------------------------------------------------------------
+export const workflowStatuses = sqliteTable("workflow_statuses", {
+  id: text("id").primaryKey(),
+  workflowId: text("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  statusId: text("status_id").notNull().references(() => statuses.id, { onDelete: "cascade" }),
+  position: integer("position").notNull().default(0),
+  triggersMerge: integer("triggers_merge", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// repos
+// ---------------------------------------------------------------------------
+export const repos = sqliteTable("repos", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  path: text("path").notNull(),
+  baseBranch: text("base_branch").notNull().default("main"),
+  compareBase: text("compare_base"), // branch to diff against for commit history, e.g. "main"
+  createdAt: text("created_at").notNull(),
+});
+
+// ---------------------------------------------------------------------------
 // epics
 // ---------------------------------------------------------------------------
 export const epics = sqliteTable("epics", {
@@ -22,6 +56,7 @@ export const epics = sqliteTable("epics", {
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   statusId: text("status_id").references(() => statuses.id),
+  workflowId: text("workflow_id").references(() => workflows.id),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -41,6 +76,8 @@ export const features = sqliteTable("features", {
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   statusId: text("status_id").references(() => statuses.id),
+  repoId: text("repo_id").references(() => repos.id),
+  branchName: text("branch_name"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -56,6 +93,7 @@ export const cards = sqliteTable("cards", {
   id: text("id").primaryKey(),
   featureId: text("feature_id").references(() => features.id),
   epicId: text("epic_id").references(() => epics.id),
+  repoId: text("repo_id").references(() => repos.id),
   type: text("type", { enum: ["story", "bug", "task"] })
     .notNull()
     .default("task"),
@@ -163,6 +201,15 @@ export type KeyboardShortcut = typeof keyboardShortcuts.$inferSelect;
 // ---------------------------------------------------------------------------
 export type Status = typeof statuses.$inferSelect;
 export type InsertStatus = typeof statuses.$inferInsert;
+
+export type Repo = typeof repos.$inferSelect;
+export type InsertRepo = typeof repos.$inferInsert;
+
+export type Workflow = typeof workflows.$inferSelect;
+export type InsertWorkflow = typeof workflows.$inferInsert;
+
+export type WorkflowStatus = typeof workflowStatuses.$inferSelect;
+export type InsertWorkflowStatus = typeof workflowStatuses.$inferInsert;
 
 export type Epic = typeof epics.$inferSelect;
 export type InsertEpic = typeof epics.$inferInsert;

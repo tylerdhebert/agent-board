@@ -1,30 +1,27 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards } from "../db/schema";
+import { cards, repos } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { wsManager } from "../wsManager";
-import { getRepoPath, git, worktreePath } from "../git";
+import { git, worktreePath } from "../git";
 
 export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
   // Create a worktree for a card
   .post(
     "/",
     ({ body, set }) => {
-      // Validate REPO_PATH is set
-      let repoPath: string;
-      try {
-        repoPath = getRepoPath();
-      } catch (err) {
-        set.status = 500;
-        return { error: (err as Error).message };
+      const repo = db.select().from(repos).where(eq(repos.id, body.repoId)).get();
+      if (!repo) {
+        set.status = 400;
+        return { error: "Repo not found" };
       }
 
-      const wtPath = worktreePath(body.branchName);
+      const wtPath = worktreePath(repo.path, body.branchName);
       const base = body.baseBranch ?? "HEAD";
 
       const result = git(
         ["worktree", "add", "-b", body.branchName, wtPath, base],
-        repoPath
+        repo.path
       );
 
       if (result.exitCode !== 0) {
@@ -32,10 +29,10 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
         return { error: result.stderr };
       }
 
-      // Update card's branch_name in DB
+      // Update card's branch_name and repo_id in DB
       const now = new Date().toISOString();
       db.update(cards)
-        .set({ branchName: body.branchName, updatedAt: now })
+        .set({ branchName: body.branchName, repoId: body.repoId, updatedAt: now })
         .where(eq(cards.id, body.cardId))
         .run();
 
@@ -50,6 +47,7 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
       body: t.Object({
         cardId: t.String(),
         branchName: t.String(),
+        repoId: t.String(),
         baseBranch: t.Optional(t.String()),
       }),
     }
@@ -57,19 +55,17 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
   // Remove a worktree and delete the branch
   .delete(
     "/:branchName",
-    ({ params, set }) => {
-      let repoPath: string;
-      try {
-        repoPath = getRepoPath();
-      } catch (err) {
-        set.status = 500;
-        return { error: (err as Error).message };
+    ({ params, query, set }) => {
+      const repo = db.select().from(repos).where(eq(repos.id, query.repoId)).get();
+      if (!repo) {
+        set.status = 400;
+        return { error: "Repo not found" };
       }
 
-      const wtPath = worktreePath(params.branchName);
+      const wtPath = worktreePath(repo.path, params.branchName);
 
-      git(["worktree", "remove", "--force", wtPath], repoPath);
-      git(["branch", "-D", params.branchName], repoPath);
+      git(["worktree", "remove", "--force", wtPath], repo.path);
+      git(["branch", "-D", params.branchName], repo.path);
 
       // Clear branch_name on any card that had this branch
       const now = new Date().toISOString();
@@ -95,5 +91,6 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
     },
     {
       params: t.Object({ branchName: t.String() }),
+      query: t.Object({ repoId: t.String() }),
     }
   );

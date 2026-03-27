@@ -13,7 +13,7 @@ import { NotificationPrompt } from "./NotificationPrompt";
 import { DailySummaryBar } from "./DailySummaryBar";
 import { ChatWidget } from "./ChatWidget";
 import { api } from "../api/client";
-import type { Status, InputRequest } from "../api/types";
+import type { Status, Epic, WorkflowStatus, InputRequest } from "../api/types";
 
 export function App() {
   // Connect WebSocket on mount
@@ -24,6 +24,7 @@ export function App() {
   const pendingInputRequests = useBoardStore((s) => s.pendingInputRequests);
   const activeInputRequestId = useBoardStore((s) => s.activeInputRequestId);
   const adminPanelOpen = useBoardStore((s) => s.adminPanelOpen);
+  const selectedEpicId = useBoardStore((s) => s.selectedEpicId);
 
   // Load statuses for modals
   const { data: statuses = [] } = useQuery<Status[]>({
@@ -32,6 +33,31 @@ export function App() {
       const { data } = await api.api.statuses.get();
       return data ?? [];
     },
+    staleTime: 30_000,
+  });
+
+  // Load epics to find the selected epic's workflowId
+  const { data: epics = [] } = useQuery<Epic[]>({
+    queryKey: ["epics"],
+    queryFn: async () => {
+      const { data } = await api.api.epics.get();
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const selectedEpicWorkflowId = selectedEpicId
+    ? (epics.find((e) => e.id === selectedEpicId)?.workflowId ?? null)
+    : null;
+
+  // Load workflow statuses for the selected epic (used in CardModal for triggersMerge)
+  const { data: workflowStatuses = [] } = useQuery<WorkflowStatus[]>({
+    queryKey: ["workflow-statuses", selectedEpicWorkflowId],
+    queryFn: async () => {
+      const { data } = await api.api.workflows({ id: selectedEpicWorkflowId! }).statuses.get();
+      return (data as WorkflowStatus[]) ?? [];
+    },
+    enabled: !!selectedEpicWorkflowId,
     staleTime: 30_000,
   });
 
@@ -69,7 +95,12 @@ export function App() {
       </div>
 
       {/* Card detail modal */}
-      {openModal === "card" && <CardModal statuses={statuses} />}
+      {openModal === "card" && (
+        <CardModal
+          statuses={statuses}
+          workflowStatuses={workflowStatuses.length > 0 ? workflowStatuses : undefined}
+        />
+      )}
 
       {/* Input answer modal */}
       {openModal === "input" && activeRequest && (

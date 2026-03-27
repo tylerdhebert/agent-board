@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema";
-import { statuses } from "./schema";
+import { statuses, workflows, workflowStatuses } from "./schema";
 import { randomUUID } from "crypto";
 import { join } from "path";
 import { mkdirSync } from "fs";
@@ -33,11 +33,45 @@ export function initDb() {
   `);
 
   sqlite.run(`
+    CREATE TABLE IF NOT EXISTS workflows (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'default',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  sqlite.run(`
+    CREATE TABLE IF NOT EXISTS workflow_statuses (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+      status_id TEXT NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      triggers_merge INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  sqlite.run(`
+    CREATE TABLE IF NOT EXISTS repos (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      path TEXT NOT NULL,
+      base_branch TEXT NOT NULL DEFAULT 'main',
+      compare_base TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  // Migration: add compare_base to existing repos table
+  try { sqlite.run(`ALTER TABLE repos ADD COLUMN compare_base TEXT`); } catch {};
+
+  sqlite.run(`
     CREATE TABLE IF NOT EXISTS epics (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       status_id TEXT REFERENCES statuses(id),
+      workflow_id TEXT REFERENCES workflows(id),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -50,16 +84,22 @@ export function initDb() {
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       status_id TEXT REFERENCES statuses(id),
+      repo_id TEXT REFERENCES repos(id),
+      branch_name TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+  // Migrations: add repo/branch to existing features table
+  try { sqlite.run(`ALTER TABLE features ADD COLUMN repo_id TEXT REFERENCES repos(id)`); } catch {}
+  try { sqlite.run(`ALTER TABLE features ADD COLUMN branch_name TEXT`); } catch {}
 
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS cards (
       id TEXT PRIMARY KEY,
       feature_id TEXT REFERENCES features(id),
       epic_id TEXT REFERENCES epics(id),
+      repo_id TEXT REFERENCES repos(id),
       type TEXT NOT NULL DEFAULT 'task' CHECK(type IN ('story','bug','task')),
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
@@ -116,6 +156,7 @@ export function initDb() {
       read_at TEXT
     )
   `);
+
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS keyboard_shortcuts (
       id TEXT PRIMARY KEY,
@@ -150,22 +191,177 @@ export function initDb() {
     );
   }
 
-  // Seed statuses if empty
+  // Seed statuses if empty (6 statuses; Ready to Merge lives in workflow_statuses only)
   const existing = db.select().from(statuses).all();
   if (existing.length === 0) {
     const seed = [
-      { id: randomUUID(), name: "To Do", color: "#64748b", position: 0 },
-      { id: randomUUID(), name: "In Progress", color: "#3b82f6", position: 1 },
-      { id: randomUUID(), name: "In Review", color: "#a855f7", position: 2 },
-      { id: randomUUID(), name: "Ready to Merge", color: "#f97316", position: 3 },
-      { id: randomUUID(), name: "Needs Revision", color: "#f59e0b", position: 4 },
-      { id: randomUUID(), name: "Blocked", color: "#ef4444", position: 5 },
-      { id: randomUUID(), name: "Done", color: "#22c55e", position: 6 },
+      { id: randomUUID(), name: "To Do",          color: "#64748b", position: 0 },
+      { id: randomUUID(), name: "In Progress",    color: "#3b82f6", position: 1 },
+      { id: randomUUID(), name: "In Review",      color: "#a855f7", position: 2 },
+      { id: randomUUID(), name: "Needs Revision", color: "#f59e0b", position: 3 },
+      { id: randomUUID(), name: "Blocked",        color: "#ef4444", position: 4 },
+      { id: randomUUID(), name: "Done",           color: "#22c55e", position: 5 },
+      // Ready to Merge is seeded here so it exists globally but assigned to workflow_statuses for worktree workflow only
+      { id: randomUUID(), name: "Ready to Merge", color: "#f97316", position: 6 },
     ];
     for (const s of seed) {
       db.insert(statuses).values(s).run();
     }
     console.log("[db] Seeded statuses");
+  }
+
+  // Seed workflows
+  const defaultWorkflowId = "workflow-default";
+  const worktreeWorkflowId = "workflow-worktree";
+  const now = new Date().toISOString();
+
+  sqlite.run(
+    `INSERT OR IGNORE INTO workflows (id, name, type, created_at) VALUES (?, ?, ?, ?)`,
+    [defaultWorkflowId, "Default", "default", now]
+  );
+  sqlite.run(
+    `INSERT OR IGNORE INTO workflows (id, name, type, created_at) VALUES (?, ?, ?, ?)`,
+    [worktreeWorkflowId, "Worktree", "worktree", now]
+  );
+
+  // Seed workflow_statuses for Default and Worktree workflows
+  const allStatuses = db.select().from(statuses).all();
+  const statusByName = Object.fromEntries(allStatuses.map(s => [s.name, s]));
+
+  const defaultStatusNames = ["To Do", "In Progress", "In Review", "Needs Revision", "Blocked", "Done"];
+
+  for (let i = 0; i < defaultStatusNames.length; i++) {
+    const s = statusByName[defaultStatusNames[i]];
+    if (!s) continue;
+    sqlite.run(
+      `INSERT OR IGNORE INTO workflow_statuses (id, workflow_id, status_id, position, triggers_merge, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [`ws-default-${s.id}`, defaultWorkflowId, s.id, i, 0, now]
+    );
+    sqlite.run(
+      `INSERT OR IGNORE INTO workflow_statuses (id, workflow_id, status_id, position, triggers_merge, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [`ws-worktree-${s.id}`, worktreeWorkflowId, s.id, i, 0, now]
+    );
+  }
+
+  // Add Ready to Merge to worktree workflow only
+  const readyStatus = statusByName["Ready to Merge"];
+  if (readyStatus) {
+    sqlite.run(
+      `INSERT OR IGNORE INTO workflow_statuses (id, workflow_id, status_id, position, triggers_merge, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [`ws-worktree-${readyStatus.id}`, worktreeWorkflowId, readyStatus.id, defaultStatusNames.length, 1, now]
+    );
+  }
+
+  // Migration: assign all existing epics without a workflow_id to the Default workflow
+  sqlite.run(
+    `UPDATE epics SET workflow_id = ? WHERE workflow_id IS NULL`,
+    [defaultWorkflowId]
+  );
+
+  // Migration: create a "General" epic for parentless cards if any exist
+  const parentlessCards = sqlite.query(`SELECT id FROM cards WHERE epic_id IS NULL`).all();
+  if (parentlessCards.length > 0) {
+    const generalEpicId = randomUUID();
+    const generalStatusId = allStatuses[0]?.id;
+    if (generalStatusId) {
+      sqlite.run(
+        `INSERT OR IGNORE INTO epics (id, title, description, status_id, workflow_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [generalEpicId, "General", "Auto-created for parentless cards", generalStatusId, defaultWorkflowId, now, now]
+      );
+      sqlite.run(
+        `UPDATE cards SET epic_id = ? WHERE epic_id IS NULL`,
+        [generalEpicId]
+      );
+      console.log(`[db] Migrated ${parentlessCards.length} parentless cards to General epic`);
+    }
+  }
+
+  // Demo seed — only runs if the DB has no epics yet
+  const epicCount = (sqlite.query(`SELECT COUNT(*) as n FROM epics`).get() as { n: number }).n;
+  if (epicCount === 0) {
+    const toDoId = statusByName["To Do"]?.id;
+    const inProgressId = statusByName["In Progress"]?.id;
+    const inReviewId = statusByName["In Review"]?.id;
+    const blockedId = statusByName["Blocked"]?.id;
+    const doneId = statusByName["Done"]?.id;
+    if (!toDoId || !inProgressId || !doneId) {
+      console.log("[db] Skipping demo seed — statuses not ready");
+      return;
+    }
+
+    // Epic 1 — default workflow (API backend)
+    const epic1Id = randomUUID();
+    sqlite.run(
+      `INSERT INTO epics (id, title, description, status_id, workflow_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [epic1Id, "API v2", "REST API redesign with improved auth and rate limiting", toDoId, defaultWorkflowId, now, now]
+    );
+
+    const f1aId = randomUUID();
+    sqlite.run(
+      `INSERT INTO features (id, epic_id, title, description, status_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [f1aId, epic1Id, "Authentication", "JWT-based auth with refresh token rotation", inProgressId, now, now]
+    );
+
+    const f1bId = randomUUID();
+    sqlite.run(
+      `INSERT INTO features (id, epic_id, title, description, status_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [f1bId, epic1Id, "Rate Limiting", "Per-client rate limits with Redis backing", toDoId, now, now]
+    );
+
+    const cards1 = [
+      { featureId: f1aId, type: "task",  title: "Design JWT token schema",         statusId: doneId,       agentId: "agent-auth" },
+      { featureId: f1aId, type: "task",  title: "Implement token issuance endpoint", statusId: inProgressId, agentId: "agent-auth" },
+      { featureId: f1aId, type: "bug",   title: "Refresh token not invalidated on logout", statusId: inReviewId ?? inProgressId, agentId: "agent-auth" },
+      { featureId: f1aId, type: "task",  title: "Add token rotation tests",         statusId: toDoId,       agentId: null },
+      { featureId: f1bId, type: "story", title: "Define rate limit policy",         statusId: toDoId,       agentId: null },
+      { featureId: f1bId, type: "task",  title: "Integrate Redis for limit counters", statusId: blockedId ?? toDoId, agentId: "agent-infra" },
+    ];
+
+    for (const c of cards1) {
+      const cardId = randomUUID();
+      sqlite.run(
+        `INSERT INTO cards (id, epic_id, feature_id, type, title, status_id, agent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cardId, epic1Id, c.featureId, c.type, c.title, c.statusId, c.agentId ?? null, now, now]
+      );
+    }
+
+    // Epic 2 — worktree workflow (frontend)
+    const epic2Id = randomUUID();
+    sqlite.run(
+      `INSERT INTO epics (id, title, description, status_id, workflow_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [epic2Id, "Dashboard v3", "Full redesign of the analytics dashboard", toDoId, worktreeWorkflowId, now, now]
+    );
+
+    const f2aId = randomUUID();
+    sqlite.run(
+      `INSERT INTO features (id, epic_id, title, description, status_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [f2aId, epic2Id, "Charts", "Replace legacy chart library with Recharts", inProgressId, now, now]
+    );
+
+    const f2bId = randomUUID();
+    sqlite.run(
+      `INSERT INTO features (id, epic_id, title, description, status_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [f2bId, epic2Id, "Filters", "Date range and metric filter bar", toDoId, now, now]
+    );
+
+    const cards2 = [
+      { featureId: f2aId, type: "story", title: "Audit current chart components",  statusId: doneId,       agentId: "agent-frontend" },
+      { featureId: f2aId, type: "task",  title: "Migrate line charts to Recharts", statusId: inProgressId, agentId: "agent-frontend" },
+      { featureId: f2aId, type: "task",  title: "Migrate bar charts to Recharts",  statusId: toDoId,       agentId: null },
+      { featureId: f2bId, type: "task",  title: "Build date range picker",         statusId: toDoId,       agentId: null },
+      { featureId: f2bId, type: "task",  title: "Wire filter state to query params", statusId: toDoId,     agentId: null },
+      { featureId: f2bId, type: "bug",   title: "Filter resets on page navigation", statusId: inReviewId ?? toDoId, agentId: "agent-frontend" },
+    ];
+
+    for (const c of cards2) {
+      const cardId = randomUUID();
+      sqlite.run(
+        `INSERT INTO cards (id, epic_id, feature_id, type, title, status_id, agent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cardId, epic2Id, c.featureId, c.type, c.title, c.statusId, c.agentId ?? null, now, now]
+      );
+    }
+
+    console.log("[db] Seeded demo epics, features, and cards");
   }
 }
 

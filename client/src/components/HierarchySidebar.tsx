@@ -9,6 +9,7 @@ import { ShortcutBadge } from "./ShortcutBadge";
 export function HierarchySidebar() {
   const hierarchyFilter = useBoardStore((s) => s.hierarchyFilter);
   const setHierarchyFilter = useBoardStore((s) => s.setHierarchyFilter);
+  const setSelectedEpicId = useBoardStore((s) => s.setSelectedEpicId);
   const [expandedEpics, setExpandedEpics] = useState<Set<string>>(new Set());
 
   const { data: epics = [] } = useQuery<Epic[]>({
@@ -38,14 +39,13 @@ export function HierarchySidebar() {
     staleTime: 5_000,
   });
 
-  // Ordered list of all sidebar filter items: all → epics+features → unassigned
+  // Ordered list of all sidebar filter items: all → epics+features
   const sidebarItems = [
     { type: "all" } as const,
     ...epics.flatMap((e) => [
       { type: "epic", id: e.id } as const,
       ...features.filter((f) => f.epicId === e.id).map((f) => ({ type: "feature", id: f.id }) as const),
     ]),
-    { type: "unassigned" } as const,
   ];
 
   useEffect(() => {
@@ -130,12 +130,7 @@ export function HierarchySidebar() {
   const getFeatureCardCount = (featureId: string) =>
     cards.filter((c) => c.featureId === featureId).length;
 
-  const unassignedCount = cards.filter(
-    (c) => c.epicId === null && c.featureId === null
-  ).length;
-
   const filterAllHint = useShortcutHint("filter-all");
-  const filterUnassignedHint = useShortcutHint("filter-unassigned");
   const sidebarToggleHint = useShortcutHint("sidebar-toggle");
 
   return (
@@ -153,7 +148,10 @@ export function HierarchySidebar() {
           label="All"
           count={cards.length}
           active={isActive({ type: "all" })}
-          onClick={() => setHierarchyFilter({ type: "all" })}
+          onClick={() => {
+            setHierarchyFilter({ type: "all" });
+            setSelectedEpicId(null);
+          }}
           indent={0}
           hint={filterAllHint}
         />
@@ -201,9 +199,10 @@ export function HierarchySidebar() {
                 {/* Epic label */}
                 <span
                   className="flex-1 text-[13px] font-mono truncate"
-                  onClick={() =>
-                    setHierarchyFilter({ type: "epic", id: epic.id })
-                  }
+                  onClick={() => {
+                    setHierarchyFilter({ type: "epic", id: epic.id });
+                    setSelectedEpicId(epic.id);
+                  }}
                 >
                   {epic.title}
                 </span>
@@ -229,9 +228,10 @@ export function HierarchySidebar() {
                     label={feature.title}
                     count={getFeatureCardCount(feature.id)}
                     active={isActive({ type: "feature", id: feature.id })}
-                    onClick={() =>
-                      setHierarchyFilter({ type: "feature", id: feature.id })
-                    }
+                    onClick={() => {
+                      setHierarchyFilter({ type: "feature", id: feature.id });
+                      setSelectedEpicId(epic.id);
+                    }}
                     indent={2}
                   />
                 ))}
@@ -251,19 +251,6 @@ export function HierarchySidebar() {
           </div>
         )}
 
-        {/* Divider */}
-        <div className="mx-3 my-1 border-t border-[#1e1e2a]" />
-
-        {/* Unassigned */}
-        <SidebarItem
-          label="Unassigned"
-          count={unassignedCount}
-          active={isActive({ type: "unassigned" })}
-          onClick={() => setHierarchyFilter({ type: "unassigned" })}
-          indent={0}
-          muted
-          hint={filterUnassignedHint}
-        />
       </nav>
     </aside>
   );

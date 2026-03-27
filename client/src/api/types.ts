@@ -13,6 +13,7 @@ export interface Epic {
   title: string;
   description: string;
   statusId: string | null;
+  workflowId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -23,6 +24,8 @@ export interface Feature {
   title: string;
   description: string;
   statusId: string | null;
+  repoId: string | null;
+  branchName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +34,7 @@ export interface Card {
   id: string;
   featureId: string | null;
   epicId: string | null;
+  repoId?: string | null;
   type: "story" | "bug" | "task";
   title: string;
   description: string;
@@ -100,6 +104,43 @@ export interface KeyboardShortcut {
   group: string;
   shortcut: string | null;
   defaultShortcut: string | null;
+}
+
+export interface Repo {
+  id: string;
+  name: string;
+  path: string;
+  baseBranch: string;
+  compareBase: string | null;
+  createdAt: string;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  type: "default" | "worktree";
+  createdAt: string;
+}
+
+export interface WorkflowStatus {
+  id: string;
+  workflowId: string;
+  statusId: string;
+  position: number;
+  triggersMerge: boolean;
+  name: string;
+  color: string;
+}
+
+export interface Commit {
+  hash: string;
+  author: string;
+  subject: string;
+  date: string;
+}
+
+export interface CommitDetail extends Commit {
+  diff: string;
 }
 
 export interface Conversation {
