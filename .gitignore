@@ -10,6 +10,7 @@ data/
 # Build output
 dist/
 .vite/
+*.tsbuildinfo
 
 # Environment
 .env
@@ -32,3 +33,4 @@ Thumbs.db
 
 # Local notes
 TODO.md
+MULTIUSER.md
