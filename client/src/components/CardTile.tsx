@@ -59,6 +59,15 @@ export function CardTile({ card, status }: Props) {
         {card.title}
       </p>
 
+      {/* Branch badge */}
+      {card.branchName && (
+        <div className="mb-2">
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-[#818cf8] bg-[#1a1a2e] border border-[#2a2a4a] px-1.5 py-0.5 rounded-sm max-w-full truncate">
+            ⎇ {card.branchName}
+          </span>
+        </div>
+      )}
+
       {/* Agent ID + timestamp */}
       <div className="flex items-center justify-between gap-2">
         {card.agentId ? (
