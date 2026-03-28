@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { db } from "../db";
 import { workflows, workflowStatuses, statuses } from "../db/schema";
 import { eq } from "drizzle-orm";
+import { nowIso } from "../helpers/db";
 
 export const workflowRoutes = new Elysia({ prefix: "/workflows" })
   .get("/", () => db.select().from(workflows).all())
@@ -47,7 +48,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
       const existing = db.select().from(workflowStatuses).where(eq(workflowStatuses.workflowId, params.id)).all();
       const maxPos = existing.reduce((m, ws) => Math.max(m, ws.position), -1);
       const id = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
       db.insert(workflowStatuses).values({
         id,
         workflowId: params.id,

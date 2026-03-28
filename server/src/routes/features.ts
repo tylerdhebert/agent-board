@@ -5,6 +5,8 @@ import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
+import { nowIso, updateAndBroadcast } from "../helpers/db";
+import { parseCommitLog, parseCommitDetail } from "../helpers/git";
 
 export const featureRoutes = new Elysia({ prefix: "/features" })
   .get("/", () => {
@@ -14,7 +16,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
     "/",
     ({ body }) => {
       const id = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
       const row = { id, ...body, createdAt: now, updatedAt: now };
       db.insert(features).values(row).run();
       const created = db
@@ -39,19 +41,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
   .patch(
     "/:id",
     ({ params, body }) => {
-      const now = new Date().toISOString();
-      db.update(features)
-        .set({ ...body, updatedAt: now })
-        .where(eq(features.id, params.id))
-        .run();
-      const updated = db
-        .select()
-        .from(features)
-        .where(eq(features.id, params.id))
-        .get();
-      if (!updated) throw new Error("Not found");
-      wsManager.broadcast("feature:updated", updated);
-      return updated;
+      return updateAndBroadcast(features, params.id, body, "feature:updated");
     },
     {
       params: t.Object({ id: t.String() }),
@@ -97,16 +87,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
       const range = `${repo.baseBranch}..${feature.branchName}`;
       const result = git(["log", range, "--format=%H|%ae|%s|%ai", "-50"], repo.path);
 
-      const commits = result.stdout
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const [hash, author, subject, date] = line.split("|");
-          return { hash, author, subject, date };
-        });
-
-      return commits;
+      return parseCommitLog(result.stdout);
     },
     { params: t.Object({ id: t.String() }) }
   )
@@ -131,16 +112,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
         repo.path
       );
 
-      const stdout = result.stdout;
-      const diffMarker = "diff --git";
-      const diffIndex = stdout.indexOf(diffMarker);
-      const header = diffIndex === -1 ? stdout : stdout.slice(0, diffIndex);
-      const diff = diffIndex === -1 ? "" : stdout.slice(diffIndex);
-
-      const headerLine = header.trim().split("\n").find((l) => l.includes("|")) ?? "";
-      const [hash, author, subject, date] = headerLine.split("|");
-
-      return { hash, author, subject, date, diff };
+      return parseCommitDetail(result.stdout);
     },
     { params: t.Object({ id: t.String(), hash: t.String() }) }
   )
@@ -189,7 +161,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
       }
 
       const buildId = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
 
       db.insert(buildResults).values({
         id: buildId,
@@ -223,7 +195,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
           const rawOutput = decoder.decode(proc.stdout) + decoder.decode(proc.stderr);
           const output = rawOutput.slice(0, 50000);
           const status = (proc.exitCode ?? 1) === 0 ? "passed" : "failed";
-          const completedAt = new Date().toISOString();
+          const completedAt = nowIso();
 
           db.update(buildResults)
             .set({ status, output, completedAt })
@@ -233,7 +205,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
           wsManager.broadcast("build:completed", { featureId, buildId, status, output });
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err);
-          const completedAt = new Date().toISOString();
+          const completedAt = nowIso();
           db.update(buildResults)
             .set({ status: "failed", output: errorMsg.slice(0, 50000), completedAt })
             .where(eq(buildResults.id, buildId))

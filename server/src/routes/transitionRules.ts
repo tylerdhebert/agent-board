@@ -3,6 +3,7 @@ import { db } from "../db";
 import { transitionRules } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { nowIso } from "../helpers/db";
 
 export const transitionRuleRoutes = new Elysia({ prefix: "/transition-rules" })
   .get("/", () => db.select().from(transitionRules).all())
@@ -15,7 +16,7 @@ export const transitionRuleRoutes = new Elysia({ prefix: "/transition-rules" })
         agentPattern: body.agentPattern ?? null,
         fromStatusId: body.fromStatusId ?? null,
         toStatusId: body.toStatusId,
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso(),
       };
       db.insert(transitionRules).values(row).run();
       return db.select().from(transitionRules).where(eq(transitionRules.id, id)).get()!;

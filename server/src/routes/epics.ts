@@ -5,6 +5,8 @@ import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 import { git } from "../git";
+import { nowIso, updateAndBroadcast } from "../helpers/db";
+import { parseCommitLog, parseCommitDetail } from "../helpers/git";
 
 export const epicRoutes = new Elysia({ prefix: "/epics" })
   .get("/", () => {
@@ -14,7 +16,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
     "/",
     ({ body }) => {
       const id = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
       const workflowId = body.workflowId
         ?? db.select().from(workflows).where(eq(workflows.type, "default")).get()?.id
         ?? null;
@@ -40,19 +42,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
   .patch(
     "/:id",
     ({ params, body }) => {
-      const now = new Date().toISOString();
-      db.update(epics)
-        .set({ ...body, updatedAt: now })
-        .where(eq(epics.id, params.id))
-        .run();
-      const updated = db
-        .select()
-        .from(epics)
-        .where(eq(epics.id, params.id))
-        .get();
-      if (!updated) throw new Error("Not found");
-      wsManager.broadcast("epic:updated", updated);
-      return updated;
+      return updateAndBroadcast(epics, params.id, body, "epic:updated");
     },
     {
       params: t.Object({ id: t.String() }),
@@ -114,16 +104,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
         repo.path
       );
 
-      const commits = result.stdout
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const [hash, author, subject, date] = line.split("|");
-          return { hash, author, subject, date };
-        });
-
-      return commits;
+      return parseCommitLog(result.stdout);
     },
     {
       params: t.Object({ id: t.String() }),
@@ -145,17 +126,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
         repo.path
       );
 
-      const stdout = result.stdout;
-      const diffMarker = "diff --git";
-      const diffIndex = stdout.indexOf(diffMarker);
-      const header = diffIndex === -1 ? stdout : stdout.slice(0, diffIndex);
-      const diff = diffIndex === -1 ? "" : stdout.slice(diffIndex);
-
-      // Parse header: first non-empty line contains the format string
-      const headerLine = header.trim().split("\n").find(l => l.includes("|")) ?? "";
-      const [hash, author, subject, date] = headerLine.split("|");
-
-      return { hash, author, subject, date, diff };
+      return parseCommitDetail(result.stdout);
     },
     {
       params: t.Object({ id: t.String(), hash: t.String() }),

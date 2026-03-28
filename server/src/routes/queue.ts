@@ -4,6 +4,7 @@ import { queueMessages } from "../db/schema";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
+import { nowIso } from "../helpers/db";
 
 export const queueRoutes = new Elysia({ prefix: "/queue" })
   // GET /api/queue/conversations — grouped thread list ordered by most recent
@@ -47,7 +48,7 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
       body: body.body,
       status: "pending" as const,
       author: body.author ?? "user",
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso(),
       readAt: null,
     };
     db.insert(queueMessages).values(msg).run();
@@ -63,7 +64,7 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
 
   // POST /api/queue/:id/read — agent marks a message as read
   .post("/:id/read", ({ params }) => {
-    const readAt = new Date().toISOString();
+    const readAt = nowIso();
     db.update(queueMessages)
       .set({ status: "read", readAt })
       .where(eq(queueMessages.id, params.id))
