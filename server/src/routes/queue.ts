@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { db, sqlite } from "../db";
 import { queueMessages } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 
@@ -24,12 +24,14 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
 
   // GET /api/queue — message list. Optional ?agentId= filter (exact match), optional ?status= filter
   .get("/", ({ query }) => {
-    let q = db.select().from(queueMessages).$dynamic();
-    if (query.agentId) {
-      q = q.where(eq(queueMessages.agentId, query.agentId));
-    }
-    if (query.status) q = q.where(eq(queueMessages.status, query.status as "pending" | "read"));
-    return q.orderBy(queueMessages.createdAt).all();
+    const conditions = [
+      query.agentId ? eq(queueMessages.agentId, query.agentId) : undefined,
+      query.status ? eq(queueMessages.status, query.status as "pending" | "read") : undefined,
+    ].filter(Boolean) as Parameters<typeof and>;
+    return db.select().from(queueMessages)
+      .where(and(...conditions))
+      .orderBy(queueMessages.createdAt)
+      .all();
   }, {
     query: t.Object({
       agentId: t.Optional(t.String()),
