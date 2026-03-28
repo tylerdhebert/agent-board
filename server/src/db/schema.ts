@@ -45,6 +45,7 @@ export const repos = sqliteTable("repos", {
   path: text("path").notNull(),
   baseBranch: text("base_branch").notNull().default("main"),
   compareBase: text("compare_base"), // branch to diff against for commit history, e.g. "main"
+  buildCommand: text("build_command"), // nullable - if null, build not configured
   createdAt: text("created_at").notNull(),
 });
 
@@ -225,3 +226,29 @@ export type InsertComment = typeof comments.$inferInsert;
 
 export type InputRequest = typeof inputRequests.$inferSelect;
 export type InsertInputRequest = typeof inputRequests.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// card_dependencies
+// ---------------------------------------------------------------------------
+export const cardDependencies = sqliteTable("card_dependencies", {
+  id: text("id").primaryKey(),
+  blockerCardId: text("blocker_card_id").notNull().references(() => cards.id, { onDelete: "cascade" }),
+  blockedCardId: text("blocked_card_id").notNull().references(() => cards.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
+export type CardDependency = typeof cardDependencies.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// build_results
+// ---------------------------------------------------------------------------
+export const buildResults = sqliteTable("build_results", {
+  id: text("id").primaryKey(),
+  featureId: text("feature_id").notNull().references(() => features.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["running", "passed", "failed"] }).notNull().default("running"),
+  output: text("output"),
+  triggeredAt: text("triggered_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
+export type BuildResult = typeof buildResults.$inferSelect;

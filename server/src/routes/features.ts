@@ -1,10 +1,10 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { features, cards, repos } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { features, cards, repos, buildResults } from "../db/schema";
+import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
-import { git } from "../git";
+import { git, worktreePath } from "../git";
 
 export const featureRoutes = new Elysia({ prefix: "/features" })
   .get("/", () => {
@@ -143,4 +143,109 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
       return { hash, author, subject, date, diff };
     },
     { params: t.Object({ id: t.String(), hash: t.String() }) }
+  )
+  // Get latest build result for a feature
+  .get(
+    "/:id/build",
+    ({ params }) => {
+      const result = db.select().from(buildResults)
+        .where(eq(buildResults.featureId, params.id))
+        .orderBy(desc(buildResults.triggeredAt))
+        .limit(1)
+        .all();
+      return result[0] ?? null;
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+  // Trigger a build for a feature (manual only)
+  .post(
+    "/:id/build",
+    async ({ params, set }) => {
+      const feature = db.select().from(features).where(eq(features.id, params.id)).get();
+      if (!feature) {
+        set.status = 404;
+        return { error: "Feature not found" };
+      }
+
+      if (!feature.repoId) {
+        set.status = 400;
+        return { error: "Feature has no repo configured" };
+      }
+
+      if (!feature.branchName) {
+        set.status = 400;
+        return { error: "Feature has no branch configured" };
+      }
+
+      const repo = db.select().from(repos).where(eq(repos.id, feature.repoId)).get();
+      if (!repo) {
+        set.status = 400;
+        return { error: "Repo not found" };
+      }
+
+      if (!repo.buildCommand) {
+        set.status = 400;
+        return { error: "No build command configured for this repo" };
+      }
+
+      const buildId = randomUUID();
+      const now = new Date().toISOString();
+
+      db.insert(buildResults).values({
+        id: buildId,
+        featureId: params.id,
+        status: "running",
+        triggeredAt: now,
+      }).run();
+
+      wsManager.broadcast("build:started", { featureId: params.id, buildId });
+
+      // Fire-and-forget async build
+      const featureId = params.id;
+      const branchName = feature.branchName;
+      const repoPath = repo.path;
+      const buildCommand = repo.buildCommand;
+      const tmpPath = worktreePath(repoPath, `__build__${buildId.slice(0, 8)}`);
+
+      (async () => {
+        try {
+          // Create temp worktree
+          git(["worktree", "add", tmpPath, branchName], repoPath);
+
+          // Run build command via shell so compound commands work (e.g. "bun run build")
+          const proc = Bun.spawnSync(["cmd", "/c", buildCommand], {
+            cwd: tmpPath,
+            stdout: "pipe",
+            stderr: "pipe",
+          });
+
+          const decoder = new TextDecoder();
+          const rawOutput = decoder.decode(proc.stdout) + decoder.decode(proc.stderr);
+          const output = rawOutput.slice(0, 50000);
+          const status = (proc.exitCode ?? 1) === 0 ? "passed" : "failed";
+          const completedAt = new Date().toISOString();
+
+          db.update(buildResults)
+            .set({ status, output, completedAt })
+            .where(eq(buildResults.id, buildId))
+            .run();
+
+          wsManager.broadcast("build:completed", { featureId, buildId, status, output });
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          const completedAt = new Date().toISOString();
+          db.update(buildResults)
+            .set({ status: "failed", output: errorMsg.slice(0, 50000), completedAt })
+            .where(eq(buildResults.id, buildId))
+            .run();
+          wsManager.broadcast("build:completed", { featureId, buildId, status: "failed", output: errorMsg });
+        } finally {
+          // Cleanup worktree
+          git(["worktree", "remove", "--force", tmpPath], repoPath);
+        }
+      })();
+
+      return { buildId, status: "running" };
+    },
+    { params: t.Object({ id: t.String() }) }
   );

@@ -6,9 +6,12 @@ import { StatusBadge } from "./StatusBadge";
 interface Props {
   card: Card;
   status: Status;
+  // blockedCardIds: set of card IDs that have active (non-Done) blockers.
+  // Passed from the parent board to avoid N+1 fetches per card.
+  blockedCardIds?: Set<string>;
 }
 
-export function CardTile({ card, status }: Props) {
+export function CardTile({ card, status, blockedCardIds }: Props) {
   const setSelectedCardId = useBoardStore((s) => s.setSelectedCardId);
   const setOpenModal = useBoardStore((s) => s.setOpenModal);
   const pulsingCardIds = useBoardStore((s) => s.pulsingCardIds);
@@ -17,6 +20,8 @@ export function CardTile({ card, status }: Props) {
 
   const isPulsing = pulsingCardIds.has(card.id);
   const hasUnseenComment = unseenCommentCardIds.has(card.id);
+  // Whether this card has pending (non-Done) blockers
+  const isBlocked = blockedCardIds?.has(card.id) ?? false;
 
   const handleClick = () => {
     clearUnseenComment(card.id);
@@ -47,8 +52,13 @@ export function CardTile({ card, status }: Props) {
       <div className="flex items-center gap-1.5 mb-2">
         <TypeBadge type={card.type} />
         <StatusBadge status={status} />
+        {isBlocked && (
+          <span className="ml-auto text-[10px] font-mono text-[#ef4444]" title="Blocked by dependencies">
+            &#128274;
+          </span>
+        )}
         {isPulsing && (
-          <span className="ml-auto text-[10px] font-mono text-red-400 animate-pulse">
+          <span className={`${isBlocked ? "" : "ml-auto"} text-[10px] font-mono text-red-400 animate-pulse`}>
             INPUT
           </span>
         )}

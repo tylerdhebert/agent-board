@@ -52,12 +52,38 @@ export function Board() {
     staleTime: 30_000,
   });
 
+  // Fetch all card dependencies to compute which cards are blocked (N+1-free: one request)
+  const { data: allDependencies = [] } = useQuery<{ blockerCardId: string; blockedCardId: string }[]>({
+    queryKey: ["card-dependencies-all"],
+    queryFn: async () => {
+      const { data } = await (api.api.cards as any).dependencies.get();
+      return (data as { blockerCardId: string; blockedCardId: string }[]) ?? [];
+    },
+    staleTime: 30_000,
+  });
+
   // If no epic is selected, show the epic picker
   if (!selectedEpicId) {
     return <EpicPicker />;
   }
 
   const epicCards = cards.filter((c) => c.epicId === selectedEpicId);
+
+  // Build set of card IDs that have at least one non-Done blocker
+  const doneCardIds = new Set(
+    cards
+      .filter((c) => {
+        // We'd need statuses here to check by name; use completedAt as a proxy for Done
+        // Cards that have completedAt set are done; this avoids needing statuses in Board
+        return c.completedAt !== null;
+      })
+      .map((c) => c.id)
+  );
+  const blockedCardIds = new Set<string>(
+    allDependencies
+      .filter((dep) => !doneCardIds.has(dep.blockerCardId))
+      .map((dep) => dep.blockedCardId)
+  );
   const visibleCards = hierarchyFilter.type === "feature"
     ? epicCards.filter((c) => c.featureId === hierarchyFilter.id)
     : epicCards;
@@ -109,7 +135,7 @@ export function Board() {
           {workflowStatuses.map((ws) => {
             const columnCards = visibleCards.filter((c) => c.statusId === ws.statusId);
             return (
-              <KanbanColumn key={ws.id} workflowStatus={ws} cards={columnCards} />
+              <KanbanColumn key={ws.id} workflowStatus={ws} cards={columnCards} blockedCardIds={blockedCardIds} />
             );
           })}
         </div>

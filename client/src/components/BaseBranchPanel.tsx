@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { Feature, Repo, Commit } from "../api/types";
+import type { Feature, Repo, Commit, BuildResult } from "../api/types";
 import { CommitDiffModal } from "./CommitDiffModal";
 import { useBoardStore } from "../store";
 
@@ -93,6 +93,9 @@ interface FeatureSectionProps {
 }
 
 function FeatureSection({ feature, repo, onCommitClick }: FeatureSectionProps) {
+  const queryClient = useQueryClient();
+  const [buildOutputExpanded, setBuildOutputExpanded] = useState(false);
+
   const { data: commits = [], isLoading } = useQuery<Commit[]>({
     queryKey: ["feature-commits", feature.id],
     queryFn: async () => {
@@ -102,6 +105,32 @@ function FeatureSection({ feature, repo, onCommitClick }: FeatureSectionProps) {
     staleTime: 30_000,
     enabled: !!(feature.repoId && feature.branchName),
   });
+
+  const { data: buildResult } = useQuery<BuildResult | null>({
+    queryKey: ["build-result", feature.id],
+    queryFn: async () => {
+      const { data } = await (api.api.features({ id: feature.id }) as any).build.get();
+      return (data as BuildResult) ?? null;
+    },
+    staleTime: 10_000,
+    refetchInterval: (query) => {
+      const data = query.state.data as BuildResult | null | undefined;
+      return data?.status === "running" ? 3000 : false;
+    },
+  });
+
+  const triggerBuildMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await (api.api.features({ id: feature.id }) as any).build.post({});
+      if (error) throw new Error("Failed to trigger build");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["build-result", feature.id] });
+    },
+  });
+
+  const hasBuildCommand = !!(repo?.buildCommand);
 
   return (
     <div className="border-b border-[#1e1e2a] last:border-b-0">
@@ -114,7 +143,52 @@ function FeatureSection({ feature, repo, onCommitClick }: FeatureSectionProps) {
           {repo && <span>{repo.name} / </span>}
           <span className="text-[#818cf8]">⎇ {feature.branchName}</span>
         </p>
+
+        {/* Build controls */}
+        {hasBuildCommand && (
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => {
+                setBuildOutputExpanded(false);
+                triggerBuildMutation.mutate();
+              }}
+              disabled={triggerBuildMutation.isPending || buildResult?.status === "running"}
+              className="px-2 py-0.5 bg-[#1a1a2e] border border-[#2a2a4a] hover:border-[#6366f1] disabled:opacity-50 text-[#818cf8] font-mono text-[10px] rounded-sm transition-colors"
+            >
+              {buildResult?.status === "running" ? "Building..." : "Run Build"}
+            </button>
+
+            {buildResult && (
+              <button
+                onClick={() => setBuildOutputExpanded((v) => !v)}
+                className={`flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] rounded-sm border transition-colors ${
+                  buildResult.status === "running"
+                    ? "border-[#2a2a4a] text-[#64748b] animate-pulse"
+                    : buildResult.status === "passed"
+                    ? "border-[#1a3a1a] text-[#4ade80] hover:border-[#4ade80]"
+                    : "border-[#3a1a1a] text-[#f87171] hover:border-[#f87171]"
+                }`}
+              >
+                {buildResult.status === "running" && (
+                  <span className="w-2 h-2 rounded-full bg-[#64748b] animate-pulse inline-block" />
+                )}
+                {buildResult.status === "passed" && <span>&#10003;</span>}
+                {buildResult.status === "failed" && <span>&#10007;</span>}
+                <span className="capitalize">{buildResult.status}</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Build output */}
+      {buildResult && buildOutputExpanded && buildResult.output && (
+        <div className="px-3 py-2 bg-[#0a0a0f] border-b border-[#1e1e2a]">
+          <pre className="text-[10px] font-mono text-[#94a3b8] whitespace-pre-wrap break-all max-h-48 overflow-y-auto leading-relaxed">
+            {buildResult.output}
+          </pre>
+        </div>
+      )}
 
       {/* Commits */}
       {isLoading ? (

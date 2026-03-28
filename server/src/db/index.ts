@@ -59,11 +59,14 @@ export function initDb() {
       path TEXT NOT NULL,
       base_branch TEXT NOT NULL DEFAULT 'main',
       compare_base TEXT,
+      build_command TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
   // Migration: add compare_base to existing repos table
   try { sqlite.run(`ALTER TABLE repos ADD COLUMN compare_base TEXT`); } catch {};
+  // Migration: add build_command to existing repos table
+  try { sqlite.run(`ALTER TABLE repos ADD COLUMN build_command TEXT`); } catch {};
 
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS epics (
@@ -154,6 +157,26 @@ export function initDb() {
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       read_at TEXT
+    )
+  `);
+
+  sqlite.run(`
+    CREATE TABLE IF NOT EXISTS card_dependencies (
+      id TEXT PRIMARY KEY,
+      blocker_card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+      blocked_card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  sqlite.run(`
+    CREATE TABLE IF NOT EXISTS build_results (
+      id TEXT PRIMARY KEY,
+      feature_id TEXT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','passed','failed')),
+      output TEXT,
+      triggered_at TEXT NOT NULL,
+      completed_at TEXT
     )
   `);
 

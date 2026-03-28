@@ -4,9 +4,10 @@ import { CardTile } from "./CardTile";
 interface Props {
   workflowStatus: WorkflowStatus;
   cards: Card[];
+  blockedCardIds?: Set<string>;
 }
 
-export function KanbanColumn({ workflowStatus, cards }: Props) {
+export function KanbanColumn({ workflowStatus, cards, blockedCardIds }: Props) {
   // Build a Status-like object for CardTile (which still expects { id, name, color })
   const statusForTile = {
     id: workflowStatus.statusId,
@@ -43,7 +44,7 @@ export function KanbanColumn({ workflowStatus, cards }: Props) {
           </div>
         ) : (
           cards.map((card) => (
-            <CardTile key={card.id} card={card} status={statusForTile} />
+            <CardTile key={card.id} card={card} status={statusForTile} blockedCardIds={blockedCardIds} />
           ))
         )}
       </div>

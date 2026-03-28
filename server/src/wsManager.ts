@@ -24,7 +24,12 @@ export type WsEvent =
   | "feature:deleted"
   | "queue:created"
   | "queue:read"
-  | "queue:deleted";
+  | "queue:deleted"
+  | "card:unblocked"
+  | "card:dependency:added"
+  | "card:dependency:removed"
+  | "build:started"
+  | "build:completed";
 
 export interface WsMessage {
   event: WsEvent;

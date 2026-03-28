@@ -112,13 +112,14 @@ export interface Repo {
   path: string;
   baseBranch: string;
   compareBase: string | null;
+  buildCommand: string | null;
   createdAt: string;
 }
 
 export interface Workflow {
   id: string;
   name: string;
-  type: "default" | "worktree";
+  type: string;
   createdAt: string;
 }
 
@@ -150,10 +151,33 @@ export interface Conversation {
   lastAt: string;
 }
 
+export interface CardDependency {
+  id: string;
+  blockerCardId: string;
+  blockedCardId: string;
+}
+
+export interface DependencyInfo {
+  blockers: { id: string; title: string; statusId: string; statusName: string }[];
+  blocking: { id: string; title: string; statusId: string; statusName: string }[];
+}
+
+export interface BuildResult {
+  id: string;
+  featureId: string;
+  status: "running" | "passed" | "failed";
+  output: string | null;
+  triggeredAt: string;
+  completedAt: string | null;
+}
+
 export type WsEvent =
   | "card:created"
   | "card:updated"
   | "card:deleted"
+  | "card:unblocked"
+  | "card:dependency:added"
+  | "card:dependency:removed"
   | "comment:created"
   | "input:requested"
   | "input:answered"
@@ -169,7 +193,9 @@ export type WsEvent =
   | "feature:deleted"
   | "queue:created"
   | "queue:read"
-  | "queue:deleted";
+  | "queue:deleted"
+  | "build:started"
+  | "build:completed";
 
 export interface WsMessage {
   event: WsEvent;

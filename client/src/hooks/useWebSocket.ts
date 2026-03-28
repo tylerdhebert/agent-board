@@ -127,6 +127,33 @@ export function useWebSocket() {
         case "queue:deleted":
           queryClient.invalidateQueries({ queryKey: ["queue"] });
           break;
+
+        case "card:unblocked":
+          queryClient.invalidateQueries({ queryKey: ["cards"] });
+          queryClient.invalidateQueries({ queryKey: ["card-dependencies-all"] });
+          if (data && typeof data === "object" && "cardId" in data) {
+            store.addPulsingCard((data as { cardId: string }).cardId);
+          }
+          break;
+
+        case "card:dependency:added":
+        case "card:dependency:removed":
+          queryClient.invalidateQueries({ queryKey: ["card-dependencies-all"] });
+          if (data && typeof data === "object" && "blockedCardId" in data) {
+            queryClient.invalidateQueries({
+              queryKey: ["card-deps", (data as { blockedCardId: string }).blockedCardId],
+            });
+          }
+          break;
+
+        case "build:started":
+        case "build:completed":
+          if (data && typeof data === "object" && "featureId" in data) {
+            queryClient.invalidateQueries({
+              queryKey: ["build-result", (data as { featureId: string }).featureId],
+            });
+          }
+          break;
       }
     },
     [queryClient] // stable — store actions come from storeRef

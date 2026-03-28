@@ -1,7 +1,7 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards, comments, statuses, transitionRules, repos, features } from "../db/schema";
-import { eq, like } from "drizzle-orm";
+import { cards, comments, statuses, transitionRules, repos, features, cardDependencies } from "../db/schema";
+import { eq, like, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
@@ -13,23 +13,45 @@ function agentPatternMatch(pattern: string, agentId: string): boolean {
 }
 
 export const cardRoutes = new Elysia({ prefix: "/cards" })
-  // List cards, optional ?status= filter
+  // List cards, optional ?status= and ?unblocked= filters
   .get(
     "/",
     ({ query }) => {
-      if (query.status) {
-        return db
-          .select()
-          .from(cards)
-          .where(eq(cards.statusId, query.status))
-          .all();
+      let allCards = query.status
+        ? db.select().from(cards).where(eq(cards.statusId, query.status)).all()
+        : db.select().from(cards).all();
+
+      if (query.unblocked === "true") {
+        // Find "Done" status id
+        const doneStatus = db.select().from(statuses).all().find((s) => s.name.toLowerCase() === "done");
+        const doneStatusId = doneStatus?.id;
+
+        // Fetch all card_dependencies
+        const allDeps = db.select().from(cardDependencies).all();
+
+        // Build a lookup of all cards by ID for efficient blocker status checks
+        const allCardsList = db.select().from(cards).all();
+        const cardById = Object.fromEntries(allCardsList.map((c) => [c.id, c]));
+
+        // For each dependency, if the blocker is not Done, mark the blocked card as having active blockers
+        const cardIdsWithActiveblockers = new Set<string>();
+        for (const dep of allDeps) {
+          const blocker = cardById[dep.blockerCardId];
+          if (blocker && blocker.statusId !== doneStatusId) {
+            cardIdsWithActiveblockers.add(dep.blockedCardId);
+          }
+        }
+
+        allCards = allCards.filter((c) => !cardIdsWithActiveblockers.has(c.id));
       }
-      return db.select().from(cards).all();
+
+      return allCards;
     },
     {
       query: t.Optional(
         t.Object({
           status: t.Optional(t.String()),
+          unblocked: t.Optional(t.String()),
         })
       ),
     }
@@ -212,6 +234,32 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       const updated = db.select().from(cards).where(eq(cards.id, params.id)).get();
       if (!updated) throw new Error("Not found");
       wsManager.broadcast("card:updated", updated);
+
+      // If card was moved to Done, check if any blocked-by-this-card cards are now fully unblocked
+      if (body.statusId) {
+        const newStatus = db.select().from(statuses).where(eq(statuses.id, body.statusId)).get();
+        if (newStatus?.name.toLowerCase() === "done") {
+          const doneStatusId = newStatus.id;
+          // Find all cards that were blocked by this card
+          const blockedByThis = db.select().from(cardDependencies)
+            .where(eq(cardDependencies.blockerCardId, params.id)).all();
+
+          for (const dep of blockedByThis) {
+            // Check if ALL blockers of that card are now Done
+            const allBlockers = db.select().from(cardDependencies)
+              .where(eq(cardDependencies.blockedCardId, dep.blockedCardId)).all();
+            const allDone = allBlockers.every((b) => {
+              if (b.blockerCardId === params.id) return true; // just marked done
+              const blockerCard = db.select().from(cards).where(eq(cards.id, b.blockerCardId)).get();
+              return blockerCard?.statusId === doneStatusId;
+            });
+            if (allDone) {
+              wsManager.broadcast("card:unblocked", { cardId: dep.blockedCardId });
+            }
+          }
+        }
+      }
+
       return updated;
     },
     {
@@ -410,4 +458,90 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         author: t.Union([t.Literal("agent"), t.Literal("user")]),
       }),
     }
+  )
+  // Get all card dependencies (for board-level blocked indicators)
+  .get(
+    "/dependencies",
+    () => {
+      return db.select().from(cardDependencies).all();
+    }
+  )
+  // Get card dependencies — returns blockers and cards this card is blocking
+  .get(
+    "/:id/dependencies",
+    ({ params }) => {
+      const allStatuses = db.select().from(statuses).all();
+      const statusMap = Object.fromEntries(allStatuses.map((s) => [s.id, s]));
+
+      // Cards that block this card
+      const blockerDeps = db.select().from(cardDependencies)
+        .where(eq(cardDependencies.blockedCardId, params.id)).all();
+      const blockers = blockerDeps.map((dep) => {
+        const blocker = db.select().from(cards).where(eq(cards.id, dep.blockerCardId)).get();
+        const status = blocker ? statusMap[blocker.statusId] : null;
+        return {
+          id: dep.blockerCardId,
+          title: blocker?.title ?? "(deleted)",
+          statusId: blocker?.statusId ?? "",
+          statusName: status?.name ?? "",
+        };
+      });
+
+      // Cards that this card blocks
+      const blockingDeps = db.select().from(cardDependencies)
+        .where(eq(cardDependencies.blockerCardId, params.id)).all();
+      const blocking = blockingDeps.map((dep) => {
+        const blocked = db.select().from(cards).where(eq(cards.id, dep.blockedCardId)).get();
+        const status = blocked ? statusMap[blocked.statusId] : null;
+        return {
+          id: dep.blockedCardId,
+          title: blocked?.title ?? "(deleted)",
+          statusId: blocked?.statusId ?? "",
+          statusName: status?.name ?? "",
+        };
+      });
+
+      return { blockers, blocking };
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+  // Add a blocker dependency to a card
+  .post(
+    "/:id/dependencies",
+    ({ params, body, set }) => {
+      if (body.blockerCardId === params.id) {
+        set.status = 400;
+        return { error: "A card cannot block itself" };
+      }
+      const id = randomUUID();
+      db.insert(cardDependencies).values({
+        id,
+        blockerCardId: body.blockerCardId,
+        blockedCardId: params.id,
+      }).run();
+      const created = db.select().from(cardDependencies).where(eq(cardDependencies.id, id)).get()!;
+      wsManager.broadcast("card:dependency:added", { blockedCardId: params.id, blockerCardId: body.blockerCardId });
+      return created;
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ blockerCardId: t.String() }),
+    }
+  )
+  // Remove a blocker dependency from a card
+  .delete(
+    "/:id/dependencies/:blockerCardId",
+    ({ params, set }) => {
+      db.delete(cardDependencies)
+        .where(
+          and(
+            eq(cardDependencies.blockedCardId, params.id),
+            eq(cardDependencies.blockerCardId, params.blockerCardId)
+          )
+        )
+        .run();
+      wsManager.broadcast("card:dependency:removed", { blockedCardId: params.id, blockerCardId: params.blockerCardId });
+      set.status = 204;
+    },
+    { params: t.Object({ id: t.String(), blockerCardId: t.String() }) }
   );

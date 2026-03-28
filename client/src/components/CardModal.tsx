@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
-import type { CardWithComments, Status, WorkflowStatus } from "../api/types";
+import type { CardWithComments, Status, WorkflowStatus, Card, DependencyInfo } from "../api/types";
 import { TypeBadge } from "./TypeBadge";
 import { DiffModal } from "./DiffModal";
 
@@ -23,6 +23,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [selectedBlockerId, setSelectedBlockerId] = useState<string>("");
 
   const { data: card, isLoading } = useQuery<CardWithComments>({
     queryKey: ["card", selectedCardId],
@@ -82,6 +83,46 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
     },
     onError: (err: Error) => {
       setMergeError(err.message);
+    },
+  });
+
+  // Dependencies
+  const { data: deps } = useQuery<DependencyInfo>({
+    queryKey: ["card-deps", selectedCardId],
+    queryFn: async () => {
+      const { data } = await (api.api.cards({ id: selectedCardId! }) as any).dependencies.get();
+      return (data as DependencyInfo) ?? { blockers: [], blocking: [] };
+    },
+    enabled: !!selectedCardId,
+  });
+
+  const { data: allCards = [] } = useQuery<Card[]>({
+    queryKey: ["cards"],
+    queryFn: async () => {
+      const { data } = await api.api.cards.get();
+      return (data as Card[]) ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const addBlockerMutation = useMutation({
+    mutationFn: async (blockerCardId: string) => {
+      const { data, error } = await (api.api.cards({ id: selectedCardId! }) as any).dependencies.post({ blockerCardId });
+      if (error) throw new Error("Failed to add blocker");
+      return data;
+    },
+    onSuccess: () => {
+      setSelectedBlockerId("");
+      queryClient.invalidateQueries({ queryKey: ["card-deps", selectedCardId] });
+    },
+  });
+
+  const removeBlockerMutation = useMutation({
+    mutationFn: async (blockerCardId: string) => {
+      await (api.api.cards({ id: selectedCardId! }) as any).dependencies({ blockerCardId }).delete();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["card-deps", selectedCardId] });
     },
   });
 
@@ -253,6 +294,80 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                   </p>
                 </div>
               )}
+
+              {/* Blockers */}
+              <div>
+                <span className="text-[#475569] font-mono uppercase tracking-wider text-[10px] block mb-2">
+                  Blockers ({deps?.blockers.length ?? 0})
+                </span>
+                <div className="space-y-1 mb-2">
+                  {deps?.blockers.map((blocker) => {
+                    const isDone = blocker.statusName.toLowerCase() === "done";
+                    return (
+                      <div
+                        key={blocker.id}
+                        className="flex items-center gap-2 px-2 py-1.5 bg-[#0d0d14] border border-[#1e1e2a] rounded-sm"
+                      >
+                        {!isDone && (
+                          <span className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0" />
+                        )}
+                        <span
+                          className={`flex-1 font-mono text-[11px] truncate ${
+                            isDone ? "line-through text-[#475569]" : "text-[#cbd5e1]"
+                          }`}
+                        >
+                          {blocker.title}
+                        </span>
+                        <span className="text-[10px] font-mono text-[#64748b] shrink-0">
+                          {blocker.statusName}
+                        </span>
+                        <button
+                          onClick={() => removeBlockerMutation.mutate(blocker.id)}
+                          disabled={removeBlockerMutation.isPending}
+                          className="text-[#475569] hover:text-[#f87171] font-mono text-sm leading-none transition-colors shrink-0"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {deps?.blockers.length === 0 && (
+                    <div className="text-[11px] font-mono text-[#334155] py-1">
+                      No blockers.
+                    </div>
+                  )}
+                </div>
+                {/* Add blocker row */}
+                <div className="flex gap-2">
+                  <select
+                    value={selectedBlockerId}
+                    onChange={(e) => setSelectedBlockerId(e.target.value)}
+                    className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-2 py-1 font-mono text-[11px] text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] cursor-pointer"
+                  >
+                    <option value="">Add blocker...</option>
+                    {allCards
+                      .filter(
+                        (c) =>
+                          c.id !== selectedCardId &&
+                          !deps?.blockers.some((b) => b.id === c.id)
+                      )
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.title}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={() => {
+                      if (selectedBlockerId) addBlockerMutation.mutate(selectedBlockerId);
+                    }}
+                    disabled={!selectedBlockerId || addBlockerMutation.isPending}
+                    className="px-3 py-1 bg-[#1e1e2a] hover:bg-[#2a2a38] disabled:opacity-50 text-[#94a3b8] font-mono text-[11px] rounded-sm transition-colors shrink-0"
+                  >
+                    {addBlockerMutation.isPending ? "..." : "Add"}
+                  </button>
+                </div>
+              </div>
 
               {/* Comments */}
               <div>
