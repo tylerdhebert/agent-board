@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Epic, Feature, Repo } from "../../api/types";
-import { inputCls, selectCls, sectionHeadingCls, cancelBtnCls, confirmDeleteBtnCls, primaryBtnCls } from "./adminStyles";
+import { inputCls, selectCls, sectionHeadingCls, cancelBtnCls, primaryBtnCls } from "./adminStyles";
 import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 interface EditState {

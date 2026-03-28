@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Status } from "../../api/types";
-import { inputCls, sectionHeadingCls, cancelBtnCls, confirmDeleteBtnCls, primaryBtnCls } from "./adminStyles";
+import { inputCls, sectionHeadingCls, cancelBtnCls, primaryBtnCls } from "./adminStyles";
 import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 export function StatusesSection() {
