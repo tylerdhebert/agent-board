@@ -3,6 +3,13 @@
  *
  * Elysia's `.ws()` gives us a ServerWebSocket handle on each connection.
  * We store those handles in a Set and iterate them to broadcast.
+ *
+ * NOTE: `WsEvent` is duplicated in `client/src/api/types.ts`. To consolidate,
+ * the canonical definition should live here (server) and the client should
+ * import it via the Eden treaty path alias (@server → server/src/index.ts).
+ * That would require re-exporting WsEvent from server/src/index.ts so it
+ * appears in the Eden treaty type surface, which the client already imports
+ * for other shared types (e.g. WorkflowType).
  */
 
 export type WsEvent =

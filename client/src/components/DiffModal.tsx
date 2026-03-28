@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
+import { parseDiff, type FileDiff } from "../lib/diffUtils";
+import { DiffViewer } from "./DiffViewer";
 
 interface DiffModalProps {
   cardId: string;
@@ -13,40 +15,6 @@ interface DiffData {
   diff: string;
   stat: string;
   branchName: string;
-}
-
-interface FileDiff {
-  path: string;
-  diff: string;
-  additions: number;
-  deletions: number;
-}
-
-function parseDiff(fullDiff: string): FileDiff[] {
-  const chunks = fullDiff.split(/(?=^diff --git )/m).filter(Boolean);
-  return chunks.map((chunk) => {
-    const firstLine = chunk.split("\n")[0];
-    const match = firstLine.match(/^diff --git a\/(.*) b\/(.*)$/);
-    const path = match ? match[2] : "unknown";
-    let additions = 0;
-    let deletions = 0;
-    for (const line of chunk.split("\n")) {
-      if (line.startsWith("+") && !line.startsWith("+++")) additions++;
-      else if (line.startsWith("-") && !line.startsWith("---")) deletions++;
-    }
-    return { path, diff: chunk, additions, deletions };
-  });
-}
-
-function lineColor(line: string): string {
-  if (line.startsWith("+")) return "#4ade80";
-  if (line.startsWith("-")) return "#f87171";
-  if (line.startsWith("@@")) return "#818cf8";
-  return "#94a3b8";
-}
-
-function basename(path: string): string {
-  return path.split("/").pop() ?? path;
 }
 
 export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalProps) {
@@ -77,9 +45,8 @@ export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalP
     return () => { cancelled = true; };
   }, [cardId]);
 
-  const files = data ? parseDiff(data.diff) : [];
+  const files: FileDiff[] = data ? parseDiff(data.diff) : [];
 
-  // Auto-select first file when data loads
   useEffect(() => {
     if (files.length > 0 && !selectedPath) {
       setSelectedPath(files[0].path);
@@ -144,65 +111,11 @@ export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalP
           )}
 
           {!loading && !error && files.length > 0 && (
-            <>
-              {/* File list sidebar */}
-              <div className="w-56 shrink-0 border-r border-[#1e1e2a] overflow-y-auto flex flex-col">
-                {files.map((file) => {
-                  const active = file.path === selectedFile?.path;
-                  return (
-                    <button
-                      key={file.path}
-                      onClick={() => setSelectedPath(file.path)}
-                      className={`w-full text-left px-3 py-2.5 border-b border-[#1a1a24] transition-colors ${
-                        active
-                          ? "bg-[#1a1a2e] border-l-2 border-l-[#6366f1]"
-                          : "hover:bg-[#16161f] border-l-2 border-l-transparent"
-                      }`}
-                    >
-                      <p className={`text-[11px] font-mono truncate ${active ? "text-[#e2e8f0]" : "text-[#94a3b8]"}`}>
-                        {basename(file.path)}
-                      </p>
-                      <p className="text-[10px] font-mono text-[#475569] truncate mt-0.5">
-                        {file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : ""}
-                      </p>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {file.additions > 0 && (
-                          <span className="text-[10px] font-mono text-[#4ade80]">+{file.additions}</span>
-                        )}
-                        {file.deletions > 0 && (
-                          <span className="text-[10px] font-mono text-[#f87171]">-{file.deletions}</span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Diff viewer */}
-              <div className="flex-1 overflow-auto min-w-0">
-                {selectedFile && (
-                  <pre className="p-4 font-mono text-xs leading-relaxed bg-[#0a0a0f] min-h-full">
-                    {selectedFile.diff.split("\n").map((line, i) => (
-                      <span
-                        key={i}
-                        style={{
-                          color: lineColor(line),
-                          display: "block",
-                          backgroundColor:
-                            line.startsWith("+") && !line.startsWith("+++")
-                              ? "rgba(74,222,128,0.06)"
-                              : line.startsWith("-") && !line.startsWith("---")
-                              ? "rgba(248,113,113,0.06)"
-                              : "transparent",
-                        }}
-                      >
-                        {line || "\u00a0"}
-                      </span>
-                    ))}
-                  </pre>
-                )}
-              </div>
-            </>
+            <DiffViewer
+              files={files}
+              selectedFile={selectedFile}
+              onSelectPath={setSelectedPath}
+            />
           )}
         </div>
       </div>

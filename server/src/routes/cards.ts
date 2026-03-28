@@ -12,6 +12,23 @@ function agentPatternMatch(pattern: string, agentId: string): boolean {
   return regex.test(agentId);
 }
 
+/** Returns the current time as an ISO 8601 string. */
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+/**
+ * Applies a patch to a card, re-fetches it, broadcasts card:updated, and
+ * returns the updated row. Throws if the card is not found after the update.
+ */
+function updateCardAndBroadcast(id: string, patch: Record<string, unknown>) {
+  db.update(cards).set(patch).where(eq(cards.id, id)).run();
+  const updated = db.select().from(cards).where(eq(cards.id, id)).get();
+  if (!updated) throw new Error("Not found");
+  wsManager.broadcast("card:updated", updated);
+  return updated;
+}
+
 export const cardRoutes = new Elysia({ prefix: "/cards" })
   // List cards, optional ?status= and ?unblocked= filters
   .get(
@@ -90,8 +107,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
       if (!card) throw new Error("Not found");
 
-      const now = new Date().toISOString();
-      const patch: Record<string, unknown> = { agentId: body.agentId, updatedAt: now };
+      const patch: Record<string, unknown> = { agentId: body.agentId, updatedAt: nowIso() };
 
       // Auto-advance: if card is currently "To Do", move it to "In Progress"
       if (body.autoAdvance !== false) {
@@ -104,10 +120,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         }
       }
 
-      db.update(cards).set(patch).where(eq(cards.id, params.id)).run();
-      const updated = db.select().from(cards).where(eq(cards.id, params.id)).get()!;
-      wsManager.broadcast("card:updated", updated);
-      return updated;
+      return updateCardAndBroadcast(params.id, patch);
     },
     {
       params: t.Object({ id: t.String() }),
@@ -151,7 +164,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         return { error: "Feature not found" };
       }
       const id = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
       const row = {
         id,
         featureId: body.featureId,
@@ -190,7 +203,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
   .patch(
     "/:id",
     ({ params, body }) => {
-      const now = new Date().toISOString();
+      const now = nowIso();
 
       // Determine completedAt: stamp when moving to Done, clear when moving away
       let completedAt: string | null | undefined = undefined;
@@ -230,10 +243,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       const patch: Record<string, unknown> = { ...body, updatedAt: now };
       if (completedAt !== undefined) patch.completedAt = completedAt;
 
-      db.update(cards).set(patch).where(eq(cards.id, params.id)).run();
-      const updated = db.select().from(cards).where(eq(cards.id, params.id)).get();
-      if (!updated) throw new Error("Not found");
-      wsManager.broadcast("card:updated", updated);
+      const updated = updateCardAndBroadcast(params.id, patch);
 
       // Check for merge conflicts when moving to a triggersMerge status
       if (body.statusId && updated.branchName && updated.repoId) {
@@ -262,10 +272,9 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
                   repo.path
                 );
                 const hasConflicts = mergeTreeResult.stdout.includes("<<<<<<<");
-                const now2 = new Date().toISOString();
                 if (hasConflicts) {
                   db.update(cards)
-                    .set({ conflictedAt: now2, conflictDetails: mergeTreeResult.stdout })
+                    .set({ conflictedAt: nowIso(), conflictDetails: mergeTreeResult.stdout })
                     .where(eq(cards.id, params.id))
                     .run();
                   const conflicted = db.select().from(cards).where(eq(cards.id, params.id)).get()!;
@@ -448,19 +457,15 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .find((s) => s.name.toLowerCase() === "done");
 
       // Update card: set to Done, clear branch_name, set completedAt
-      const now = new Date().toISOString();
+      const mergedAt = nowIso();
       const patch: Record<string, unknown> = {
         branchName: null,
-        updatedAt: now,
-        completedAt: now,
+        updatedAt: mergedAt,
+        completedAt: mergedAt,
       };
       if (doneStatus) patch.statusId = doneStatus.id;
 
-      db.update(cards).set(patch).where(eq(cards.id, params.id)).run();
-      const updated = db.select().from(cards).where(eq(cards.id, params.id)).get();
-      if (updated) {
-        wsManager.broadcast("card:updated", updated);
-      }
+      updateCardAndBroadcast(params.id, patch);
 
       return { success: true };
     },
@@ -483,13 +488,12 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .get();
       if (!card) throw new Error("Card not found");
       const id = randomUUID();
-      const now = new Date().toISOString();
       const row = {
         id,
         cardId: params.id,
         author: body.author,
         body: body.body,
-        createdAt: now,
+        createdAt: nowIso(),
       };
       db.insert(comments).values(row).run();
       const created = db
