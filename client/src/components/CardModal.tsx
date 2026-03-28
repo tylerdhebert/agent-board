@@ -7,6 +7,8 @@ import type { CardWithComments, Status, WorkflowStatus, Card, DependencyInfo } f
 import { TypeBadge } from "./TypeBadge";
 import { DiffModal } from "./DiffModal";
 import { ConflictDetailsModal } from "./ConflictDetailsModal";
+import { formatTimestamp } from "../lib/formatUtils";
+import { ModalOverlay } from "./ui/ModalOverlay";
 
 interface Props {
   statuses: Status[];
@@ -172,13 +174,9 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
 
   return (
     <>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={handleClose}
-    >
+    <ModalOverlay onClose={handleClose} className="flex flex-col max-h-[90vh]">
       <div
-        className="relative w-full max-w-2xl mx-4 bg-[#111118] border border-[#2a2a38] rounded-sm shadow-2xl flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
+        className="flex flex-col max-h-[90vh] overflow-hidden rounded-sm"
         style={currentStatus ? { borderTop: `3px solid ${currentStatus.color}` } : {}}
       >
         {/* Header */}
@@ -507,7 +505,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
 
     {showDiff && card?.branchName && (
       <DiffModal
@@ -528,12 +526,3 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
   );
 }
 
-function formatTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}

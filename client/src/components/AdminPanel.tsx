@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useBoardStore } from "../store";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
+import { ModalOverlay } from "./ui/ModalOverlay";
 import { CardsSection } from "./admin/CardsSection";
 import { MoveSection } from "./admin/MoveSection";
 import { StatusesSection } from "./admin/StatusesSection";
@@ -21,15 +22,7 @@ export function AdminPanel() {
   useEscapeToClose(useCallback(() => setAdminPanelOpen(false), [setAdminPanelOpen]));
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={() => setAdminPanelOpen(false)}
-    >
-      <div
-        className="relative w-full mx-4 bg-[#111118] border border-[#2a2a38] rounded-sm shadow-2xl flex flex-col h-[50vh]"
-        style={{ maxWidth: 820 }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay onClose={() => setAdminPanelOpen(false)} className="flex flex-col h-[50vh] max-w-[820px]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e2a] shrink-0">
           <div className="flex items-center gap-2">
@@ -91,7 +84,6 @@ export function AdminPanel() {
             {activeSection === "danger" && <DangerSection />}
           </div>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }

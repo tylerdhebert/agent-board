@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Status } from "../../api/types";
+import { inputCls, sectionHeadingCls } from "./adminStyles";
+import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 export function CardsSection() {
   const queryClient = useQueryClient();
@@ -71,9 +73,7 @@ export function CardsSection() {
     <div className="space-y-6">
       {/* Delete all Done */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Bulk Actions
-        </h3>
+        <h3 className={sectionHeadingCls}>Bulk Actions</h3>
         <div className="bg-[#0d0d14] border border-[#2a2a38] rounded-sm p-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-[12px] font-mono text-[#e2e8f0]">
@@ -118,15 +118,13 @@ export function CardsSection() {
 
       {/* Card search + individual delete */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Find and Delete
-        </h3>
+        <h3 className={sectionHeadingCls}>Find and Delete</h3>
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search cards by title..."
-          className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors mb-2"
+          className={`${inputCls()} mb-2`}
         />
         {filteredCards.length > 0 && (
           <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -190,34 +188,17 @@ function CardDeleteRow({
           </span>
         </div>
       </div>
-      {!confirm ? (
-        <button
-          onClick={() => setConfirm(true)}
+      <div className="shrink-0">
+        <DeleteConfirmRow
+          confirming={confirm}
+          onStartConfirm={() => setConfirm(true)}
+          onCancel={() => setConfirm(false)}
+          onConfirm={() => { setConfirm(false); onDelete(); }}
           disabled={isDeleting}
-          className="text-[11px] font-mono text-[#64748b] hover:text-[#f87171] disabled:opacity-50 transition-colors shrink-0"
-        >
-          Delete
-        </button>
-      ) : (
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setConfirm(false)}
-            className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              setConfirm(false);
-              onDelete();
-            }}
-            disabled={isDeleting}
-            className="px-2 py-0.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
-          >
-            {isDeleting ? "..." : "Confirm"}
-          </button>
-        </div>
-      )}
+          isPending={isDeleting}
+          pendingLabel="..."
+        />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import type { Card } from "../api/types";
+import { ModalOverlay } from "./ui/ModalOverlay";
 
 interface Props {
   card: Card;
@@ -116,13 +117,9 @@ export function ConflictDetailsModal({ card, onClose }: Props) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-      onClick={handleClose}
-    >
+    <ModalOverlay onClose={handleClose} zIndex="z-[60]" className="flex flex-col h-[85vh] max-w-5xl">
       <div
-        className="relative w-full max-w-5xl mx-4 bg-[#111118] border border-[#2a2a38] rounded-sm shadow-2xl flex flex-col h-[85vh]"
-        onClick={(e) => e.stopPropagation()}
+        className="flex flex-col h-full rounded-sm overflow-hidden"
         style={{ borderTop: "3px solid #f59e0b" }}
       >
         {/* Header */}
@@ -205,6 +202,6 @@ export function ConflictDetailsModal({ card, onClose }: Props) {
           })}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

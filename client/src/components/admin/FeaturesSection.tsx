@@ -2,14 +2,8 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Epic, Feature, Repo } from "../../api/types";
-
-function inputCls(invalid = false, width = "w-full") {
-  return `${width} bg-[#0a0a0f] border rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
-    invalid ? "border-[#f87171] focus:border-[#f87171]" : "border-[#2a2a38] focus:border-[#6366f1]"
-  }`;
-}
-
-const selectCls = "w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] transition-colors cursor-pointer";
+import { inputCls, selectCls, sectionHeadingCls, cancelBtnCls, confirmDeleteBtnCls, primaryBtnCls } from "./adminStyles";
+import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 interface EditState {
   title: string;
@@ -158,9 +152,7 @@ export function FeaturesSection() {
     <div className="space-y-6">
       {/* Create form */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Create Feature
-        </h3>
+        <h3 className={sectionHeadingCls}>Create Feature</h3>
         <form onSubmit={handleCreate} className="space-y-2">
           <input
             type="text"
@@ -212,7 +204,7 @@ export function FeaturesSection() {
           <button
             type="submit"
             disabled={createFeatureMutation.isPending}
-            className="px-4 py-2 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs rounded-sm transition-colors"
+            className={primaryBtnCls}
           >
             {createFeatureMutation.isPending ? "Creating..." : "Create Feature"}
           </button>
@@ -221,9 +213,7 @@ export function FeaturesSection() {
 
       {/* Existing features */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Existing Features ({features.length})
-        </h3>
+        <h3 className={sectionHeadingCls}>Existing Features ({features.length})</h3>
         {features.length === 0 ? (
           <p className="text-[11px] font-mono text-[#334155]">No features yet.</p>
         ) : (
@@ -291,14 +281,14 @@ export function FeaturesSection() {
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => { setEditingId(null); setEditAttempted(false); }}
-                        className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                        className={cancelBtnCls}
                       >
                         Cancel
                       </button>
                       <button
                         onClick={() => handleSave(feature.id)}
                         disabled={updateMutation.isPending}
-                        className="px-3 py-1 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs rounded-sm transition-colors"
+                        className={primaryBtnCls}
                       >
                         {updateMutation.isPending ? "Saving..." : "Save"}
                       </button>
@@ -330,42 +320,23 @@ export function FeaturesSection() {
                       {cCount} card{cCount !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  {!isConfirming ? (
-                    <div className="flex gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!isConfirming && (
                       <button
                         onClick={() => startEdit(feature)}
                         className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => setDeletingId(feature.id)}
-                        className="text-[11px] font-mono text-[#64748b] hover:text-[#f87171] transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <p className="text-[10px] font-mono text-[#f87171]">
-                        Deletes {cCount} card{cCount !== 1 ? "s" : ""}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setDeletingId(null)}
-                          className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={() => deleteFeature(feature.id)}
-                          className="px-2 py-0.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
-                        >
-                          Confirm
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    )}
+                    <DeleteConfirmRow
+                      confirming={isConfirming}
+                      onStartConfirm={() => setDeletingId(feature.id)}
+                      onCancel={() => setDeletingId(null)}
+                      onConfirm={() => deleteFeature(feature.id)}
+                      warningText={cCount > 0 ? `Deletes ${cCount} card${cCount !== 1 ? "s" : ""}` : undefined}
+                    />
+                  </div>
                 </div>
               );
             })}

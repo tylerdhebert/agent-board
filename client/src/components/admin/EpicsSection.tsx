@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Epic, Feature, Workflow } from "../../api/types";
+import { inputCls, selectCls, sectionHeadingCls, primaryBtnCls } from "./adminStyles";
+import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 export function EpicsSection() {
   const queryClient = useQueryClient();
@@ -92,28 +94,26 @@ export function EpicsSection() {
     <div className="space-y-6">
       {/* Create form */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Create Epic
-        </h3>
+        <h3 className={sectionHeadingCls}>Create Epic</h3>
         <form onSubmit={handleCreate} className="space-y-2">
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Epic title"
-            className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors"
+            className={inputCls()}
           />
           <input
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
-            className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors"
+            className={inputCls()}
           />
           <select
             value={workflowId}
             onChange={(e) => setWorkflowId(e.target.value)}
-            className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] transition-colors cursor-pointer"
+            className={selectCls}
           >
             <option value="">Workflow (optional)</option>
             {workflows.map((w) => (
@@ -125,7 +125,7 @@ export function EpicsSection() {
           <button
             type="submit"
             disabled={!title.trim() || createEpicMutation.isPending}
-            className="px-4 py-2 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs rounded-sm transition-colors"
+            className={primaryBtnCls}
           >
             {createEpicMutation.isPending ? "Creating..." : "Create Epic"}
           </button>
@@ -134,9 +134,7 @@ export function EpicsSection() {
 
       {/* Existing epics */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Existing Epics ({epics.length})
-        </h3>
+        <h3 className={sectionHeadingCls}>Existing Epics ({epics.length})</h3>
         {epics.length === 0 ? (
           <p className="text-[11px] font-mono text-[#334155]">No epics yet.</p>
         ) : (
@@ -175,34 +173,15 @@ export function EpicsSection() {
                       {fCount} feature{fCount !== 1 ? "s" : ""} · {cCount} card{cCount !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  {!isConfirming ? (
-                    <button
-                      onClick={() => setDeletingId(epic.id)}
-                      className="text-[11px] font-mono text-[#64748b] hover:text-[#f87171] transition-colors shrink-0"
-                    >
-                      Delete
-                    </button>
-                  ) : (
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <p className="text-[10px] font-mono text-[#f87171]">
-                        Deletes {fCount} feature{fCount !== 1 ? "s" : ""} + {cCount} card{cCount !== 1 ? "s" : ""}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setDeletingId(null)}
-                          className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={() => deleteEpic(epic.id)}
-                          className="px-2 py-0.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
-                        >
-                          Confirm
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <div className="shrink-0">
+                    <DeleteConfirmRow
+                      confirming={isConfirming}
+                      onStartConfirm={() => setDeletingId(epic.id)}
+                      onCancel={() => setDeletingId(null)}
+                      onConfirm={() => deleteEpic(epic.id)}
+                      warningText={`Deletes ${fCount} feature${fCount !== 1 ? "s" : ""} + ${cCount} card${cCount !== 1 ? "s" : ""}`}
+                    />
+                  </div>
                 </div>
               );
             })}

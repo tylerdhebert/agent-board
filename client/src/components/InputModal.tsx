@@ -5,6 +5,7 @@ import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
 import type { InputRequest, Question } from "../api/types";
 import { useCountdown } from "../hooks/useCountdown";
+import { ModalOverlay } from "./ui/ModalOverlay";
 
 interface Props {
   request: InputRequest;
@@ -70,14 +71,10 @@ export function InputModal({ request }: Props) {
   const timedOut = secondsRemaining === 0;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-      onClick={handleClose}
-    >
+    <ModalOverlay onClose={handleClose} className="max-w-lg flex flex-col overflow-hidden" >
       <div
-        className="relative w-full max-w-lg mx-4 bg-[#111118] border border-[#ef4444]/40 rounded-sm shadow-2xl flex flex-col"
+        className="flex flex-col"
         style={{ borderTop: "3px solid #ef4444" }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Countdown bar */}
         <div className="h-1 bg-[#1a1a24] overflow-hidden">
@@ -163,7 +160,7 @@ export function InputModal({ request }: Props) {
           )}
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

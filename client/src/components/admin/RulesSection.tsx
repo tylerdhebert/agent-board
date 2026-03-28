@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Status, TransitionRule } from "../../api/types";
+import { inputCls, selectCls, sectionHeadingCls, primaryBtnCls } from "./adminStyles";
 
 export function RulesSection() {
   const queryClient = useQueryClient();
@@ -65,22 +66,20 @@ export function RulesSection() {
 
       {/* Create form */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          New Rule
-        </h3>
+        <h3 className={sectionHeadingCls}>New Rule</h3>
         <div className="space-y-2">
           <input
             type="text"
             value={agentPattern}
             onChange={(e) => setAgentPattern(e.target.value)}
             placeholder="Agent pattern (e.g. implementer*, or blank = all agents)"
-            className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors"
+            className={inputCls()}
           />
           <div className="flex gap-2">
             <select
               value={fromStatusId}
               onChange={(e) => setFromStatusId(e.target.value)}
-              className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] transition-colors"
+              className={selectCls.replace("w-full", "flex-1")}
             >
               <option value="">From: any status</option>
               {sortedStatuses.map((s) => (
@@ -91,7 +90,7 @@ export function RulesSection() {
             <select
               value={toStatusId}
               onChange={(e) => setToStatusId(e.target.value)}
-              className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] transition-colors"
+              className={selectCls.replace("w-full", "flex-1")}
             >
               <option value="">To: select status</option>
               {sortedStatuses.map((s) => (
@@ -102,7 +101,7 @@ export function RulesSection() {
           <button
             onClick={() => createMutation.mutate()}
             disabled={!toStatusId || createMutation.isPending}
-            className="px-3 py-2 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs rounded-sm transition-colors"
+            className={primaryBtnCls}
           >
             Add Rule
           </button>
@@ -111,9 +110,7 @@ export function RulesSection() {
 
       {/* Rule list */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Active Rules ({rules.length})
-        </h3>
+        <h3 className={sectionHeadingCls}>Active Rules ({rules.length})</h3>
         {rules.length === 0 ? (
           <p className="text-[11px] font-mono text-[#334155]">No rules — all agent moves are allowed.</p>
         ) : (

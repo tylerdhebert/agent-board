@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Status } from "../../api/types";
+import { inputCls, sectionHeadingCls, cancelBtnCls, confirmDeleteBtnCls, primaryBtnCls } from "./adminStyles";
+import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 export function StatusesSection() {
   const queryClient = useQueryClient();
@@ -85,9 +87,7 @@ export function StatusesSection() {
     <div className="space-y-6">
       {/* Create */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          New Status
-        </h3>
+        <h3 className={sectionHeadingCls}>New Status</h3>
         <form
           onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMutation.mutate(); }}
           className="flex gap-2 items-center"
@@ -97,7 +97,7 @@ export function StatusesSection() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Status name"
-            className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors"
+            className={inputCls(false, "flex-1")}
           />
           <input
             type="color"
@@ -109,7 +109,7 @@ export function StatusesSection() {
           <button
             type="submit"
             disabled={!newName.trim() || createMutation.isPending}
-            className="px-3 py-2 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs rounded-sm transition-colors shrink-0"
+            className={`${primaryBtnCls} shrink-0`}
           >
             Add
           </button>
@@ -118,9 +118,7 @@ export function StatusesSection() {
 
       {/* Existing */}
       <div>
-        <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3">
-          Existing Statuses ({sortedStatuses.length})
-        </h3>
+        <h3 className={sectionHeadingCls}>Existing Statuses ({sortedStatuses.length})</h3>
         <div className="space-y-1">
           {sortedStatuses.map((s, idx) => {
             const count = cardCount(s.id);
@@ -138,7 +136,7 @@ export function StatusesSection() {
                       type="text"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-2 py-1 font-mono text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] transition-colors"
+                      className={inputCls(false, "flex-1")}
                     />
                     <input
                       type="color"
@@ -149,13 +147,13 @@ export function StatusesSection() {
                     <button
                       onClick={() => saveMutation.mutate(s.id)}
                       disabled={!editName.trim() || saveMutation.isPending}
-                      className="px-2 py-1 bg-[#6366f1] hover:bg-[#818cf8] disabled:opacity-50 text-white font-mono text-[11px] rounded-sm transition-colors"
+                      className={primaryBtnCls}
                     >
                       Save
                     </button>
                     <button
                       onClick={() => setEditingId(null)}
-                      className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                      className={cancelBtnCls}
                     >
                       Cancel
                     </button>
@@ -164,52 +162,35 @@ export function StatusesSection() {
                   <div className="flex items-center gap-3">
                     <span className="flex-1 text-[12px] font-mono text-[#e2e8f0]">{s.name}</span>
                     <span className="text-[10px] font-mono text-[#334155]">{count} card{count !== 1 ? "s" : ""}</span>
-                    {!isConfirming ? (
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => reorderMutation.mutate({ id: s.id, newPosition: sortedStatuses[idx - 1].position, swapId: sortedStatuses[idx - 1].id, swapPosition: s.position })}
-                          disabled={idx === 0 || reorderMutation.isPending}
-                          className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        >↑</button>
-                        <button
-                          onClick={() => reorderMutation.mutate({ id: s.id, newPosition: sortedStatuses[idx + 1].position, swapId: sortedStatuses[idx + 1].id, swapPosition: s.position })}
-                          disabled={idx === sortedStatuses.length - 1 || reorderMutation.isPending}
-                          className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        >↓</button>
-                        <button
-                          onClick={() => startEdit(s)}
-                          className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => { setDeletingId(s.id); setEditingId(null); }}
-                          className="text-[11px] font-mono text-[#64748b] hover:text-[#f87171] transition-colors"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {count > 0 && (
-                          <span className="text-[10px] font-mono text-[#f87171]">
-                            {count} card{count !== 1 ? "s" : ""} affected
-                          </span>
-                        )}
-                        <button
-                          onClick={() => setDeletingId(null)}
-                          className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={() => deleteStatus(s.id)}
-                          className="px-2 py-0.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
-                        >
-                          Confirm
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {!isConfirming && (
+                        <>
+                          <button
+                            onClick={() => reorderMutation.mutate({ id: s.id, newPosition: sortedStatuses[idx - 1].position, swapId: sortedStatuses[idx - 1].id, swapPosition: s.position })}
+                            disabled={idx === 0 || reorderMutation.isPending}
+                            className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >↑</button>
+                          <button
+                            onClick={() => reorderMutation.mutate({ id: s.id, newPosition: sortedStatuses[idx + 1].position, swapId: sortedStatuses[idx + 1].id, swapPosition: s.position })}
+                            disabled={idx === sortedStatuses.length - 1 || reorderMutation.isPending}
+                            className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >↓</button>
+                          <button
+                            onClick={() => startEdit(s)}
+                            className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                          >
+                            Edit
+                          </button>
+                        </>
+                      )}
+                      <DeleteConfirmRow
+                        confirming={isConfirming}
+                        onStartConfirm={() => { setDeletingId(s.id); setEditingId(null); }}
+                        onCancel={() => setDeletingId(null)}
+                        onConfirm={() => deleteStatus(s.id)}
+                        warningText={count > 0 ? `${count} card${count !== 1 ? "s" : ""} affected` : undefined}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
