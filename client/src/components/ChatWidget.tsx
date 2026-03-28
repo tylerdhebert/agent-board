@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, API_BASE } from "../api/client";
+import { api } from "../api/client";
 import type { QueueMessage, Conversation, Card } from "../api/types";
 import { useBoardStore } from "../store";
 import { useShortcutHint } from "../hooks/useShortcutHint";
@@ -40,8 +40,8 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
   const { data: messages = [] } = useQuery<QueueMessage[]>({
     queryKey: ["queue", agentId],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/queue?agentId=${encodeURIComponent(agentId)}`);
-      return res.json();
+      const { data } = await api.api.queue.get({ query: { agentId } });
+      return data ?? [];
     },
     staleTime: 5_000,
   });
@@ -59,11 +59,11 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
   // Mark agent messages as read when window opens
   useEffect(() => {
     (async () => {
-      const res = await fetch(`${API_BASE}/queue?agentId=${encodeURIComponent(agentId)}&status=pending`);
-      const pending: QueueMessage[] = await res.json();
+      const { data } = await api.api.queue.get({ query: { agentId, status: "pending" } });
+      const pending: QueueMessage[] = data ?? [];
       await Promise.all(
         pending.filter(m => m.author !== "user").map(m =>
-          fetch(`${API_BASE}/queue/${m.id}/read`, { method: "POST" })
+          (api.api.queue({ id: m.id }) as any).read.post({})
         )
       );
       if (pending.some(m => m.author !== "user")) {

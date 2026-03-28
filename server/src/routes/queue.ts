@@ -28,7 +28,7 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
     if (query.agentId) {
       q = q.where(eq(queueMessages.agentId, query.agentId));
     }
-    if (query.status) q = q.where(eq(queueMessages.status, query.status));
+    if (query.status) q = q.where(eq(queueMessages.status, query.status as "pending" | "read"));
     return q.orderBy(queueMessages.createdAt).all();
   }, {
     query: t.Object({

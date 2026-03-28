@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
-import { API_BASE } from "../api/client"; // kept: /api/input/:id/answer uses raw fetch (long-poll adjacent)
+import { api } from "../api/client";
 import type { InputRequest, Question } from "../api/types";
 import { useCountdown } from "../hooks/useCountdown";
 
@@ -36,13 +36,9 @@ export function InputModal({ request }: Props) {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`${API_BASE}/input/${request.id}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
-      });
-      if (!res.ok) throw new Error("Failed to submit answers");
-      return res.json();
+      const { data, error } = await (api.api.input({ id: request.id }) as any).answer.post({ answers });
+      if (error) throw new Error("Failed to submit answers");
+      return data;
     },
     onSuccess: () => {
       removePendingInputRequest(request.id);

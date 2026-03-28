@@ -177,7 +177,7 @@ export const queueMessages = sqliteTable("queue_messages", {
   id: text("id").primaryKey(),
   agentId: text("agent_id").notNull(),
   body: text("body").notNull(),
-  status: text("status").notNull().default("pending"), // "pending" | "read"
+  status: text("status", { enum: ["pending", "read"] }).notNull().default("pending"),
   author: text("author").notNull().default("user"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   readAt: text("read_at"),

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, API_BASE } from "../../api/client";
+import { api } from "../../api/client";
 import type { Status, Workflow, WorkflowStatus } from "../../api/types";
 
 export function WorkflowsSection() {
@@ -84,16 +84,8 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
       swapPosition: number;
     }) => {
       await Promise.all([
-        fetch(`${API_BASE}/workflows/${workflow.id}/statuses/${wsId}/position`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ position: newPosition }),
-        }),
-        fetch(`${API_BASE}/workflows/${workflow.id}/statuses/${swapWsId}/position`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ position: swapPosition }),
-        }),
+        (api.api.workflows({ id: workflow.id }) as any).statuses({ wsId }).position.patch({ position: newPosition }),
+        (api.api.workflows({ id: workflow.id }) as any).statuses({ wsId: swapWsId }).position.patch({ position: swapPosition }),
       ]);
     },
     onSuccess: () => {
@@ -103,11 +95,7 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
 
   const mergeMutation = useMutation({
     mutationFn: async ({ wsId, triggersMerge }: { wsId: string; triggersMerge: boolean }) => {
-      await fetch(`${API_BASE}/workflows/${workflow.id}/statuses/${wsId}/merge`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ triggersMerge }),
-      });
+      await (api.api.workflows({ id: workflow.id }) as any).statuses({ wsId }).merge.patch({ triggersMerge });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflow-statuses", workflow.id] });
@@ -116,9 +104,7 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async (wsId: string) => {
-      await fetch(`${API_BASE}/workflows/${workflow.id}/statuses/${wsId}`, {
-        method: "DELETE",
-      });
+      await (api.api.workflows({ id: workflow.id }) as any).statuses({ wsId }).delete();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflow-statuses", workflow.id] });
@@ -127,11 +113,7 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
 
   const addMutation = useMutation({
     mutationFn: async (statusId: string) => {
-      await fetch(`${API_BASE}/workflows/${workflow.id}/statuses`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ statusId }),
-      });
+      await (api.api.workflows({ id: workflow.id }) as any).statuses.post({ statusId });
     },
     onSuccess: () => {
       setSelectedStatusId("");

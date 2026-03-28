@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, API_BASE } from "../../api/client";
+import { api } from "../../api/client";
 import type { KeyboardShortcut } from "../../api/types";
 
 function eventToKey(e: KeyboardEvent): string {
@@ -30,18 +30,14 @@ export function ShortcutsSection() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, shortcut }: { id: string; shortcut: string | null }) => {
-      await fetch(`${API_BASE}/shortcuts/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shortcut }),
-      });
+      await api.api.shortcuts({ id }).patch({ shortcut });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shortcuts"] }),
   });
 
   const resetMutation = useMutation({
     mutationFn: async () => {
-      await fetch(`${API_BASE}/shortcuts/reset`, { method: "POST" });
+      await (api.api.shortcuts as any).reset.post({});
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shortcuts"] }),
   });

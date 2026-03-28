@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { API_BASE } from "../api/client";
+import { api } from "../api/client";
 
 interface BrowseResult {
   path: string;
@@ -28,10 +28,8 @@ export function PathPicker({ value, onChange, placeholder, invalid, className }:
   async function browse(path?: string) {
     setLoading(true);
     try {
-      const params = path ? `?path=${encodeURIComponent(path)}` : "";
-      const res = await fetch(`${API_BASE}/fs/browse${params}`);
-      const data: BrowseResult = await res.json();
-      setResult(data);
+      const { data } = await api.api.fs.browse.get({ query: path ? { path } : {} });
+      setResult(data as BrowseResult);
     } catch {
       // ignore
     } finally {
