@@ -3,13 +3,14 @@ import { db } from "../db";
 import { repos } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { nowIso } from "../helpers/db";
 
 export const repoRoutes = new Elysia({ prefix: "/repos" })
   .get("/", () => db.select().from(repos).all())
   .post(
     "/",
     ({ body }) => {
-      const now = new Date().toISOString();
+      const now = nowIso();
       const repo = { id: randomUUID(), ...body, baseBranch: body.baseBranch ?? "main", createdAt: now };
       db.insert(repos).values(repo).run();
       return repo;

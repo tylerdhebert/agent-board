@@ -5,6 +5,7 @@ import { eq, like, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
+import { nowIso } from "../helpers/db";
 
 function agentPatternMatch(pattern: string, agentId: string): boolean {
   // Simple wildcard: * matches anything
@@ -90,7 +91,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
       if (!card) throw new Error("Not found");
 
-      const now = new Date().toISOString();
+      const now = nowIso();
       const patch: Record<string, unknown> = { agentId: body.agentId, updatedAt: now };
 
       // Auto-advance: if card is currently "To Do", move it to "In Progress"
@@ -119,7 +120,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
   )
   // Cards completed today (local date prefix match on completed_at)
   .get("/completed-today", () => {
-    const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+    const today = nowIso().slice(0, 10); // "YYYY-MM-DD"
     return db.select().from(cards).where(like(cards.completedAt, `${today}%`)).all();
   })
   // Get single card with comments
@@ -151,7 +152,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         return { error: "Feature not found" };
       }
       const id = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
       const row = {
         id,
         featureId: body.featureId,
@@ -190,7 +191,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
   .patch(
     "/:id",
     ({ params, body }) => {
-      const now = new Date().toISOString();
+      const now = nowIso();
 
       // Determine completedAt: stamp when moving to Done, clear when moving away
       let completedAt: string | null | undefined = undefined;
@@ -262,7 +263,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
                   repo.path
                 );
                 const hasConflicts = mergeTreeResult.stdout.includes("<<<<<<<");
-                const now2 = new Date().toISOString();
+                const now2 = nowIso();
                 if (hasConflicts) {
                   db.update(cards)
                     .set({ conflictedAt: now2, conflictDetails: mergeTreeResult.stdout })
@@ -448,7 +449,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .find((s) => s.name.toLowerCase() === "done");
 
       // Update card: set to Done, clear branch_name, set completedAt
-      const now = new Date().toISOString();
+      const now = nowIso();
       const patch: Record<string, unknown> = {
         branchName: null,
         updatedAt: now,
@@ -483,7 +484,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .get();
       if (!card) throw new Error("Card not found");
       const id = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
       const row = {
         id,
         cardId: params.id,

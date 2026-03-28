@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 import { pollRegistry } from "../pollRegistry";
+import { nowIso } from "../helpers/db";
 
 export const inputRoutes = new Elysia({ prefix: "/input" })
   // Get all pending input requests
@@ -43,7 +44,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
 
       // Save the input request
       const requestId = randomUUID();
-      const now = new Date().toISOString();
+      const now = nowIso();
       db.insert(inputRequests)
         .values({
           id: requestId,
@@ -59,7 +60,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
       // Flip card status to Blocked if that status exists
       if (blockedStatus) {
         db.update(cards)
-          .set({ statusId: blockedStatus.id, updatedAt: new Date().toISOString() })
+          .set({ statusId: blockedStatus.id, updatedAt: nowIso() })
           .where(eq(cards.id, cardId))
           .run();
         const updatedCard = db
@@ -147,7 +148,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         return { error: `Request is already ${request.status}` };
       }
 
-      const now = new Date().toISOString();
+      const now = nowIso();
       db.update(inputRequests)
         .set({
           answers: JSON.stringify(body.answers),

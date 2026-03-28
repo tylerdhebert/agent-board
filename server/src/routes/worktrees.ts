@@ -4,6 +4,7 @@ import { cards, repos, features } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
+import { nowIso } from "../helpers/db";
 
 export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
   // Create a worktree for a card
@@ -46,7 +47,7 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
       }
 
       // Update card's branch_name and repo_id in DB
-      const now = new Date().toISOString();
+      const now = nowIso();
       db.update(cards)
         .set({ branchName: body.branchName, repoId: body.repoId, updatedAt: now })
         .where(eq(cards.id, body.cardId))
@@ -84,7 +85,7 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
       git(["branch", "-D", params.branchName], repo.path);
 
       // Clear branch_name on any card that had this branch
-      const now = new Date().toISOString();
+      const now = nowIso();
       const affected = db
         .select()
         .from(cards)
