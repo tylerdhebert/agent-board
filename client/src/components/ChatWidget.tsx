@@ -56,21 +56,22 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
     },
   });
 
-  // Mark agent messages as read when window opens
-  useEffect(() => {
-    (async () => {
-      const { data } = await api.api.queue.get({ query: { agentId, status: "pending" } });
-      const pending: QueueMessage[] = data ?? [];
-      await Promise.all(
-        pending.filter(m => m.author !== "user").map(m =>
-          (api.api.queue({ id: m.id }) as any).read.post({})
-        )
-      );
-      if (pending.some(m => m.author !== "user")) {
-        queryClient.invalidateQueries({ queryKey: ["queue"] });
-      }
-    })();
-  }, [agentId]);
+  const markRead = useCallback(async () => {
+    if (unread === 0) return;
+    const { data } = await api.api.queue.get({ query: { agentId, status: "pending" } });
+    const pending: QueueMessage[] = data ?? [];
+    await Promise.all(
+      pending.filter(m => m.author !== "user").map(m =>
+        (api.api.queue({ id: m.id }) as any).read.post({})
+      )
+    );
+    if (pending.some(m => m.author !== "user")) {
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    }
+  }, [agentId, unread, queryClient]);
+
+  // Mark as read when window is first opened
+  useEffect(() => { markRead(); }, [agentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -81,6 +82,7 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
     <div
       className="fixed z-40 w-[320px] flex flex-col border border-b-0 border-[#2a2a38] rounded-t-lg overflow-hidden shadow-2xl"
       style={{ bottom: bottomOffset, left: leftOffset, height: collapsed ? "auto" : 380, background: "#1c1c28" }}
+      onClick={markRead}
     >
       {/* Header — click to collapse/expand, ✕ to close */}
       <div
