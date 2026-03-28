@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Status, Workflow, WorkflowStatus } from "../../api/types";
+import { selectCls, sectionHeadingCls, primaryBtnCls } from "./adminStyles";
 
 export function WorkflowsSection() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -17,9 +18,7 @@ export function WorkflowsSection() {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-[11px] font-mono text-[#475569] uppercase tracking-wider">
-        Workflows ({workflows.length})
-      </h3>
+      <h3 className={sectionHeadingCls}>Workflows ({workflows.length})</h3>
 
       {workflows.length === 0 ? (
         <p className="text-[11px] font-mono text-[#334155]">No workflows configured.</p>
@@ -253,7 +252,7 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
             <select
               value={selectedStatusId}
               onChange={(e) => setSelectedStatusId(e.target.value)}
-              className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-2 py-1.5 font-mono text-[11px] text-[#94a3b8] focus:outline-none focus:border-[#6366f1] transition-colors"
+              className={selectCls.replace("w-full", "flex-1").replace("text-xs", "text-[11px]")}
             >
               <option value="">Add a status...</option>
               {availableStatuses.map((s) => (
@@ -265,7 +264,7 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
             <button
               onClick={handleAdd}
               disabled={!selectedStatusId || addMutation.isPending}
-              className="px-3 py-1.5 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-[11px] rounded-sm transition-colors shrink-0"
+              className={`${primaryBtnCls} shrink-0`}
             >
               Add
             </button>

@@ -6,6 +6,7 @@ import { useBoardStore } from "../store";
 import { useShortcutHint } from "../hooks/useShortcutHint";
 import { ShortcutBadge } from "./ShortcutBadge";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
+import { formatTimestamp } from "../lib/formatUtils";
 
 // ---------------------------------------------------------------------------
 // Thread window — one per open conversation
@@ -484,7 +485,7 @@ export function ChatWidget() {
                         <div className="min-w-0">
                           <p className="text-[12px] font-mono text-[#e2e8f0] truncate">{c.agentId}</p>
                           <p className="text-[10px] font-mono text-[#475569]">
-                            {new Date(c.lastAt).toLocaleString()}
+                            {formatTimestamp(c.lastAt)}
                           </p>
                         </div>
                       </div>
