@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { epics, features, cards, repos } from "../db/schema";
+import { epics, features, cards, repos, workflows } from "../db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
@@ -15,7 +15,10 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
     ({ body }) => {
       const id = randomUUID();
       const now = new Date().toISOString();
-      const row = { id, ...body, createdAt: now, updatedAt: now };
+      const workflowId = body.workflowId
+        ?? db.select().from(workflows).where(eq(workflows.type, "default")).get()?.id
+        ?? null;
+      const row = { id, ...body, workflowId, createdAt: now, updatedAt: now };
       db.insert(epics).values(row).run();
       const created = db
         .select()

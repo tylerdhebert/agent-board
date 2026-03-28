@@ -31,7 +31,7 @@ Bun monorepo with two workspaces: `server/` and `client/`. The server and client
 **Elysia** HTTP + WebSocket server on port **31377**. Entry: `src/index.ts` → `src/app.ts`.
 
 - `app.ts` — bootstraps DB (`initDb()`), mounts CORS, Swagger (`/docs`), WebSocket (`/ws`), and all route groups under `/api`
-- `routes/` — one file per resource: `cards`, `statuses`, `epics`, `features`, `input`, `queue`, `transitionRules`, `shortcuts`
+- `routes/` — one file per resource: `cards`, `statuses`, `epics`, `features`, `input`, `queue`, `transitionRules`, `shortcuts`, `workflows`, `repos`, `worktrees`, `fs`
 - `wsManager.ts` — module-level `Set<WsClient>`; every mutation route calls `wsManager.broadcast(event, data)` after writing to DB
 - `pollRegistry.ts` — input long-poll: `POST /api/input` parks a `Promise` here; `POST /api/input/:id/answer` resolves it, unblocking the waiting agent
 - `db/schema.ts` — Drizzle ORM table definitions (SQLite)
@@ -50,10 +50,15 @@ SQLite at `data/agent-board.db`. All IDs are UUID text. Timestamps are ISO 8601 
 
 ```
 statuses       — id, name (unique), color (hex), position (int)
-epics          — id, title, description, status_id → statuses
-features       — id, epic_id → epics (required), title, description, status_id → statuses
-cards          — id, epic_id → epics, feature_id → features, status_id → statuses (required),
-                 type (story|bug|task), title, description, agent_id, completed_at
+workflows      — id, name, type ("default"|"worktree")
+workflow_statuses — id, workflow_id → workflows, status_id → statuses, position (int), triggers_merge (bool)
+repos          — id, name, path, base_branch, compare_base
+epics          — id, title, description, status_id → statuses, workflow_id → workflows
+features       — id, epic_id → epics (required), title, description, status_id → statuses,
+                 repo_id → repos, branch_name
+cards          — id, epic_id → epics, feature_id → features, repo_id → repos,
+                 status_id → statuses (required), type (story|bug|task), title, description,
+                 agent_id, branch_name, completed_at
 comments       — id, card_id → cards (cascade), author (agent|user), body
 input_requests — id, card_id → cards (cascade), questions (JSON), answers (JSON),
                  status (pending|answered|timed_out), timeout_secs
@@ -62,7 +67,7 @@ queue_messages — id, agent_id, author (default 'user'), body, status (pending|
 keyboard_shortcuts — id (= action), action (unique), label, group, shortcut (nullable), default_shortcut
 ```
 
-No migration runner — new columns added to `CREATE TABLE IF NOT EXISTS` directly. Delete the DB to reset.
+No migration runner — new columns added to `CREATE TABLE IF NOT EXISTS` directly. For existing DBs, add columns via `try { sqlite.run('ALTER TABLE t ADD COLUMN ...') } catch {}` in `db/index.ts`. Delete the DB to reset fully.
 
 ### Client (`client/src/`)
 
@@ -80,11 +85,15 @@ No migration runner — new columns added to `CREATE TABLE IF NOT EXISTS` direct
 - `hooks/useShortcutHint.ts` — returns shortcut string for an action when `ctrlHeld` is true (reads TanStack Query cache, no fetch)
 - `components/ShortcutBadge.tsx` — renders `<kbd>` badge; shown inline next to UI elements when ctrl is held
 
-**Hierarchy sidebar filter:** `hierarchyFilter` in store (type: `all | epic | feature | unassigned`). Board filters cards by this value. Sidebar cycling (`kb:sidebar-prev/next`) auto-expands the destination epic and collapses the one being left (unless moving into its own features).
+**Hierarchy sidebar filter:** `hierarchyFilter` in store (type: `all | epic | feature`). Board filters cards by this value. Sidebar cycling (`kb:sidebar-prev/next`) auto-expands the destination epic and collapses the one being left (unless moving into its own features).
 
 **Chat widget:** Thread windows render at `left: 450 + index * 330`. Max 3 visible; overflow threads shown in a `+N more` bar at slot 4 that pulses on unread. Clicking swaps oldest visible thread with selected overflow thread.
 
-**Admin panel:** Fixed `h-[50vh]` modal with sidenav (cards, move, statuses, epics, features, rules, shortcuts, danger). Sections are in `components/admin/`.
+**Admin panel:** Fixed `h-[50vh]` modal with sidenav (statuses, workflows, repos, epics, features, cards, move, rules, shortcuts, danger). Sections are in `components/admin/`.
+
+**BaseBranchPanel:** Right-side commit history panel. Driven by features — shows commit log for each feature that has `repoId` + `branchName` set. Query key: `["feature-commits", feature.id]`. Narrows to one feature when `hierarchyFilter.type === "feature"`. Git range: `repo.baseBranch..feature.branchName`.
+
+**PathPicker:** Component for filesystem path input with server-side directory browser. Fetches `GET /api/fs/browse?path=` which returns `{ path, sep, entries }`. Drill-down navigation with ↑ parent and Select current directory.
 
 ## Key Conventions
 
@@ -94,3 +103,4 @@ No migration runner — new columns added to `CREATE TABLE IF NOT EXISTS` direct
 - Shortcut strings use the format `ctrl+,`, `escape`, `[` — built by `eventToKey()` in `useKeyboardShortcuts.ts`
 - Never add `Co-Authored-By` trailers to commits
 - Never commit without checking with the user first
+- `AGENT_API.md` — full REST API reference for agents; `AGENT_MANDATE.md` — mandatory usage directive for agents (include in agent system prompts)

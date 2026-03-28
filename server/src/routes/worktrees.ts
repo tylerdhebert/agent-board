@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards, repos } from "../db/schema";
+import { cards, repos, features } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
@@ -17,7 +17,23 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
       }
 
       const wtPath = worktreePath(repo.path, body.branchName);
-      const base = body.baseBranch ?? "HEAD";
+
+      // Determine the base: explicit > feature branch > HEAD
+      let base = body.baseBranch ?? "HEAD";
+      if (!body.baseBranch) {
+        const card = db.select().from(cards).where(eq(cards.id, body.cardId)).get();
+        const feature = card?.featureId
+          ? db.select().from(features).where(eq(features.id, card.featureId)).get()
+          : null;
+        if (feature?.branchName) {
+          // Create the feature branch if it doesn't exist yet
+          const exists = git(["rev-parse", "--verify", feature.branchName], repo.path);
+          if (exists.exitCode !== 0) {
+            git(["checkout", "-b", feature.branchName, repo.baseBranch], repo.path);
+          }
+          base = feature.branchName;
+        }
+      }
 
       const result = git(
         ["worktree", "add", "-b", body.branchName, wtPath, base],

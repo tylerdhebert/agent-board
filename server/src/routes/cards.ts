@@ -301,7 +301,10 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       }
 
       const repoPath = repo.path;
-      const targetBranch = body.targetBranch ?? repo.baseBranch;
+      const feature = card.featureId
+        ? db.select().from(features).where(eq(features.id, card.featureId)).get()
+        : null;
+      const targetBranch = body.targetBranch ?? feature?.branchName ?? repo.baseBranch;
       const strategy = body.strategy ?? "merge";
       const branchName = card.branchName;
 
