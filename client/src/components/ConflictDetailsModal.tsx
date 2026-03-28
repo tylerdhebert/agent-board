@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import type { Card } from "../api/types";
 import { ModalOverlay } from "./ui/ModalOverlay";
+import { basename } from "../lib/diffUtils";
 
 interface Props {
   card: Card;
@@ -93,9 +94,6 @@ function conflictLineStyle(line: string): { color: string; background: string } 
   return { color: "#64748b", background: "transparent" };
 }
 
-function basename(path: string): string {
-  return path.split("/").pop() ?? path;
-}
 
 export function ConflictDetailsModal({ card, onClose }: Props) {
   const handleClose = useCallback(() => onClose(), [onClose]);
