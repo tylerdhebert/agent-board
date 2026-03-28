@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
-import { parseDiff } from "../lib/diffUtils";
+import { parseDiff, type FileDiff } from "../lib/diffUtils";
 import { DiffViewer } from "./DiffViewer";
 import { ModalOverlay } from "./ui/ModalOverlay";
 
@@ -45,10 +45,10 @@ export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalP
     return () => { cancelled = true; };
   }, [cardId]);
 
-  const files = data ? parseDiff(data.diff) : [];
+  const files: FileDiff[] = data ? parseDiff(data.diff) : [];
 
   return (
-    <ModalOverlay onClose={handleClose} className="flex flex-col h-[85vh] max-w-5xl" >
+    <ModalOverlay onClose={handleClose} className="flex flex-col h-[85vh] max-w-5xl">
       <div style={{ borderTop: "3px solid #818cf8" }} className="flex flex-col h-full rounded-sm overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between p-4 border-b border-[#1e1e2a] shrink-0">

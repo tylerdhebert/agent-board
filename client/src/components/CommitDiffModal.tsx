@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
 import type { Commit, CommitDetail } from "../api/types";
-import { parseDiff } from "../lib/diffUtils";
+import { parseDiff, type FileDiff } from "../lib/diffUtils";
 import { formatTimestamp } from "../lib/formatUtils";
 import { DiffViewer } from "./DiffViewer";
 import { ModalOverlay } from "./ui/ModalOverlay";
@@ -40,7 +40,7 @@ export function CommitDiffModal({ featureId, commit, onClose }: Props) {
     return () => { cancelled = true; };
   }, [featureId, commit.hash]);
 
-  const files = data ? parseDiff(data.diff) : [];
+  const files: FileDiff[] = data ? parseDiff(data.diff) : [];
 
   return (
     <ModalOverlay onClose={handleClose} className="flex flex-col h-[85vh] max-w-5xl">

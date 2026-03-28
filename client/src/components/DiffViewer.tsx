@@ -1,14 +1,5 @@
-/**
- * DiffViewer
- *
- * Renders a split-pane diff UI: a file-list sidebar on the left and a
- * colourised diff on the right.  Used by both DiffModal (card branch diff)
- * and CommitDiffModal (single-commit diff) so the layout/logic is not
- * duplicated.
- */
-
 import { useState, useEffect } from "react";
-import { type FileDiff, diffLineColor, diffLineBg, basename } from "../lib/diffUtils";
+import { type FileDiff, diffLineColor, diffLineBg, basename, dirname } from "../lib/diffUtils";
 
 interface DiffViewerProps {
   loading: boolean;
@@ -61,9 +52,7 @@ export function DiffViewer({ loading, error, files }: DiffViewerProps) {
       <div className="w-56 shrink-0 border-r border-[#1e1e2a] overflow-y-auto flex flex-col">
         {files.map((file) => {
           const active = file.path === selectedFile?.path;
-          const dir = file.path.includes("/")
-            ? file.path.slice(0, file.path.lastIndexOf("/"))
-            : "";
+          const dir = dirname(file.path);
           return (
             <button
               key={file.path}

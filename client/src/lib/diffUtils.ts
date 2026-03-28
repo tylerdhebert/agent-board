@@ -1,3 +1,5 @@
+// Shared utilities for rendering unified diffs
+
 export interface FileDiff {
   path: string;
   diff: string;
@@ -36,4 +38,8 @@ export function diffLineBg(line: string): string {
 
 export function basename(path: string): string {
   return path.split("/").pop() ?? path;
+}
+
+export function dirname(path: string): string {
+  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
 }
