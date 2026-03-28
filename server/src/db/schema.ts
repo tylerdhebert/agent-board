@@ -95,7 +95,7 @@ export const features = sqliteTable("features", {
 // ---------------------------------------------------------------------------
 export const cards = sqliteTable("cards", {
   id: text("id").primaryKey(),
-  featureId: text("feature_id").references(() => features.id),
+  featureId: text("feature_id").notNull().references(() => features.id, { onDelete: "cascade" }),
   epicId: text("epic_id").references(() => epics.id),
   repoId: text("repo_id").references(() => repos.id),
   type: text("type", { enum: ["story", "bug", "task"] })

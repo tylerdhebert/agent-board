@@ -2,9 +2,7 @@
 
 Base URL: `http://localhost:31377/api`
 
-**If the agent board is running locally, use it for all tasks.** It is the primary coordination surface between you and the user — for tracking work, signaling progress, asking questions, and receiving messages. Do not skip it in favor of inline comments or silent execution.
-
-This board is the shared workspace between you and the user. Use it to track your work, signal progress, and — critically — ask the user for input when you need it.
+**If the agent board is running locally, use it for all tasks.** It is the primary coordination surface between you and the user — for tracking work, signalling progress, asking questions, and receiving messages. Do not skip it in favor of inline comments or silent execution.
 
 ---
 
@@ -12,22 +10,22 @@ This board is the shared workspace between you and the user. Use it to track you
 
 If you are an **orchestrator** (spawning and directing other agents), you have additional responsibilities:
 
-- **Assign stable agent IDs** to each sub-agent before spawning them (e.g. `implementer-1`, `reviewer-1`, `planner-1`). These IDs are used for card ownership, chat routing, and queue filtering — they must be unique and consistent for the lifetime of the task.
-- **Create cards for sub-agents** before or immediately after spawning them. Each agent should have a card to work from.
+- **Assign stable agent IDs** to each sub-agent before spawning them (e.g. `implementer-1`, `reviewer-1`). These IDs are used for card ownership, chat routing, and queue filtering — they must be unique and consistent for the lifetime of the task.
+- **Create cards for sub-agents** before or immediately after spawning them.
 - **Assign cards to agents** by setting `agentId` on the card so ownership is visible in the UI.
 - **Use epics and features** to group related work. Create an epic for the overall goal, features for major workstreams, and cards for individual agent tasks.
 - **Do not claim cards yourself** unless you are doing the work. Orchestrators typically create and assign, not execute.
-- **Monitor via comments** — sub-agents post progress comments; you can read them via `GET /cards/:id` to decide next steps.
-- **Route messages correctly** — if the user sends a message to a specific agent ID, forward it or ensure that agent checks its queue. Use `GET /queue/conversations` to see which agents have unread messages.
+- **Monitor via comments** — sub-agents post progress comments; read them via `GET /cards/:id` to decide next steps.
+- **Route messages correctly** — use `GET /queue/conversations` to see which agents have unread messages.
 
 ---
 
 ## Workflow Basics
 
-1. **Claim a card** when you pick up a task — this sets you as the owner and moves it to In Progress.
+1. **Claim a card** when you pick up a task — sets you as the owner and moves it to In Progress.
 2. **Post comments** on the card as you work. This is how the user follows along.
-3. **Ask for input** using the long-poll endpoint whenever you need a decision, approval, or information. The request surfaces in the UI with an audio alert. **Do not proceed past a blocking question — wait for the answer.**
-4. **Check your messages** at the start of each turn — the user may have left you a message via the chat system.
+3. **Ask for input** using the long-poll endpoint whenever you need a decision or approval. The request surfaces in the UI with an audio alert. **Do not proceed past a blocking question — wait for the answer.**
+4. **Check your messages** at the start of each turn.
 5. **Update the status** when you finish or hit a wall.
 
 ---
@@ -38,22 +36,19 @@ If you are an **orchestrator** (spawning and directing other agents), you have a
 ```
 GET /cards
 GET /cards?status=<statusId>
+GET /cards?unblocked=true
 ```
-Returns all cards, optionally filtered by status ID. Use `GET /statuses` first to resolve status names to IDs.
+Use `GET /statuses` first to resolve status names to IDs. `unblocked=true` returns only cards with no active (non-Done) blockers.
 
 ### Get a single card (with comments)
 ```
 GET /cards/:id
 ```
-Returns the card plus its full comment thread.
 
 ### Claim a card
 ```
 POST /cards/:id/claim
-{
-  "agentId": "implementer-1",
-  "autoAdvance": true
-}
+{ "agentId": "implementer-1", "autoAdvance": true }
 ```
 Sets you as the owner. If `autoAdvance` is true (default) and the card is in "To Do", it automatically moves to "In Progress". **Do this before starting work.**
 
@@ -61,7 +56,7 @@ Sets you as the owner. If `autoAdvance` is true (default) and the card is in "To
 ```
 GET /cards/:id/allowed-statuses?agentId=implementer-1
 ```
-Returns the list of status objects you are permitted to move this card to from its current status, based on the configured transition rules. If no rules are configured, returns all statuses. **Check this before patching status** to avoid a rejected move.
+Returns the statuses you are permitted to move this card to from its current status, based on configured transition rules. **Check this before patching status** to avoid a rejected move.
 
 ### Update a card
 ```
@@ -71,10 +66,13 @@ PATCH /cards/:id
   "agentId": "implementer-1",
   "title": "...",
   "description": "...",
-  "type": "task|story|bug"
+  "type": "task|story|bug",
+  "conflictedAt": null
 }
 ```
-All fields are optional. When changing status, include your `agentId` so transition rules are enforced. If a move is not permitted, the server returns an error.
+All fields are optional. When changing status, include your `agentId` so transition rules are enforced. Set `conflictedAt: null` to clear a merge conflict after rebasing.
+
+**Conflict auto-check:** when `statusId` is set to a `triggersMerge` status and the card has a `branchName`, the server automatically runs `git merge-tree` to check for conflicts. If conflicts are found, `conflictedAt` is stamped and a `card:conflicted` event is broadcast. No merge is performed.
 
 ### Create a card
 ```
@@ -88,7 +86,7 @@ POST /cards
   "agentId": "implementer-1"
 }
 ```
-`featureId` is **required** — every card must belong to a feature. `epicId` is derived automatically from the feature. Use `GET /epics` then `GET /features` to resolve IDs.
+`featureId` is **required** — every card must belong to a feature. `epicId` is derived from the feature automatically. Use `GET /epics` then `GET /features` to resolve IDs.
 
 ### Delete a card
 ```
@@ -98,204 +96,163 @@ DELETE /cards/:id
 ### Post a comment
 ```
 POST /cards/:id/comments
+{ "body": "Finished the migration. Moving to review.", "author": "agent" }
+```
+
+### View branch diff
+```
+GET /cards/:id/diff
+```
+Returns `{ diff, stat, branchName }` — the full diff of the card's branch against its base.
+
+### Merge a branch
+```
+POST /cards/:id/merge
 {
-  "body": "Finished the database migration. Moving to review.",
-  "author": "agent"
+  "strategy": "merge|squash",
+  "targetBranch": "feat/my-feature"
 }
 ```
-Use comments to narrate your progress. The user reads these.
+Merges the card's branch into `targetBranch` (defaults to the feature's branch, then the repo's base branch). Returns `{ conflict: true, message }` if the merge fails. **Only call this after confirming `conflictedAt` is null.**
+
+---
+
+## Card Dependencies (Blockers)
+
+Cards can be blocked by other cards. A blocked card shows a lock icon in the UI. When all blockers reach Done, a `card:unblocked` event is broadcast.
+
+### Get blockers and blocking cards
+```
+GET /cards/:id/dependencies
+```
+Returns `{ blockers: [...], blocking: [...] }`. Each entry has `{ id, title, statusId, statusName }`.
+
+### Add a blocker
+```
+POST /cards/:id/dependencies
+{ "blockerCardId": "<card that must be Done first>" }
+```
+
+### Remove a blocker
+```
+DELETE /cards/:id/dependencies/:blockerCardId
+```
+
+### Bulk fetch all dependencies (board-level)
+```
+GET /cards/dependencies
+```
+Returns all `{ blockerCardId, blockedCardId }` pairs. Used by the board to compute which cards are currently blocked.
 
 ---
 
 ## Requesting User Input ⚠️
 
-**This is the most important endpoint. Use it any time you need a decision, approval, clarification, or information you cannot determine yourself. Do not guess — ask.**
+**Use this any time you need a decision, approval, or information you cannot determine yourself. Do not guess — ask.**
 
 ```
 POST /input
 {
   "cardId": "<your card id>",
   "questions": [
-    {
-      "id": "q1",
-      "type": "yesno",
-      "prompt": "Should I overwrite the existing config file?"
-    },
-    {
-      "id": "q2",
-      "type": "choice",
-      "prompt": "Which environment should this deploy to?",
-      "options": ["staging", "production"]
-    },
-    {
-      "id": "q3",
-      "type": "text",
-      "prompt": "What should the new API endpoint be named?",
-      "default": "/api/v2/users"
-    }
+    { "id": "q1", "type": "yesno", "prompt": "Should I overwrite the existing config?" },
+    { "id": "q2", "type": "choice", "prompt": "Which environment?", "options": ["staging", "production"] },
+    { "id": "q3", "type": "text", "prompt": "What should the endpoint be named?", "default": "/api/v2/users" }
   ],
   "timeoutSecs": 900
 }
 ```
 
-**This call blocks.** The HTTP request stays open until the user answers in the UI (or the timeout expires). Your card is automatically moved to "Blocked" while waiting. When the user responds, the call returns:
+**This call blocks.** The request stays open until the user answers in the UI (or the timeout expires). Your card is automatically moved to "Blocked" while waiting.
 
+Response on answer:
 ```json
-{
-  "requestId": "...",
-  "status": "answered",
-  "answers": {
-    "q1": "yes",
-    "q2": "production",
-    "q3": "/api/v2/users"
-  }
-}
+{ "requestId": "...", "status": "answered", "answers": { "q1": "yes", "q2": "production", "q3": "/api/v2/users" } }
 ```
 
-On timeout (HTTP 408):
+Response on timeout (HTTP 408):
 ```json
 { "requestId": "...", "status": "timed_out", "answers": null }
 ```
 
-**Question types:**
-- `text` — free-form string. Supply `default` if there's a sensible fallback.
-- `yesno` — answer will be `"yes"` or `"no"`.
-- `choice` — single-select from `options`. Answer will be one of the option strings.
-
-**When to use it:** Whenever you are blocked on a human decision, need approval before a destructive action, are uncertain about scope or intent, or need credentials/values you don't have. The user gets an audio alert and a prompt in the UI — they expect to be asked.
+**Question types:** `text` (free-form, optional `default`), `yesno` (returns `"yes"` or `"no"`), `choice` (single-select from `options`).
 
 ---
 
 ## Agent Chat (Message Queue)
 
-The board has a bidirectional chat system. The user can send you messages between turns and expects you to read them before doing any work. You can also send replies that appear in the user's chat window.
+The board has a bidirectional chat system. The user can send you messages between turns. Read them before doing any work.
 
 ### Check your messages (do this at the start of each turn)
 ```
 GET /queue?agentId=<your-agent-id>&status=pending
 ```
-Returns pending messages addressed to your exact agent id, ordered oldest first. Your agent id must match exactly — use the id the orchestrator assigned you.
+Returns pending messages addressed to **exactly** your agent ID, ordered oldest first. Both `agentId` and `status` filters are applied together — do not omit `agentId` or you will receive all pending messages from all agents.
 
-### Reply to a message / send a message
+### Send a message / reply
 ```
 POST /queue
-{
-  "agentId": "implementer-1",
-  "body": "Done — the migration is complete. No data loss.",
-  "author": "implementer-1"
-}
+{ "agentId": "implementer-1", "body": "Migration complete. No data loss.", "author": "implementer-1" }
 ```
-Set `author` to your own agent id so the user's chat window shows it as a reply from you. The `agentId` field identifies which conversation thread this belongs to.
+Set `author` to your own agent ID so the user's chat window shows it as a reply from you.
 
 ### Mark a message as read
 ```
 POST /queue/:id/read
 ```
-Call this after you have processed a message.
+Call this after processing a message.
 
 ### List all conversations
 ```
 GET /queue/conversations
 ```
-Returns a summary per agent: `{ agentId, total, unread, lastAt }`.
-
-### QueueMessage shape
-```json
-{
-  "id": "uuid",
-  "agentId": "implementer",
-  "body": "Please prioritize the login bug fix next.",
-  "status": "pending",
-  "author": "user",
-  "createdAt": "2026-03-24T10:00:00.000Z",
-  "readAt": null
-}
-```
-
-**`author` field:** `"user"` means the human sent it. Any other value is the agent id of the sender.
+Returns `[{ agentId, total, unread, lastAt }]`.
 
 **Per-turn workflow:**
-1. At the start of each turn, call `GET /queue?agentId=<your-id>&status=pending`.
-2. Read the messages and adjust your plan accordingly.
-3. Reply with `POST /queue` (set `author` to your agent id) if a response is warranted.
-4. Call `POST /queue/:id/read` for each message you act on.
-5. Note any changes to your plan in a comment on the relevant card.
-6. Additionally, at the end of each turn, call `GET /queue?agentId=<your-id>&status=pending`.
-7. If there are additional new messages for you, do not end your turn if the user has requested additional work.
+1. `GET /queue?agentId=<your-id>&status=pending` — read messages, adjust plan
+2. Reply with `POST /queue` if warranted; set `author` to your agent ID
+3. `POST /queue/:id/read` for each message you act on
+4. Note any plan changes in a comment on the relevant card
+5. Repeat the queue check at the end of your turn
 
 ---
 
 ## Statuses
-
-### List all statuses (ordered by position)
 ```
 GET /statuses
 ```
-Returns `[{ id, name, color, position }]`. Resolve status names to IDs before using them in card operations.
+Returns `[{ id, name, color, position }]`. Resolve status names to IDs before using them.
 
 ---
 
 ## Epics
 
-### List all epics
 ```
 GET /epics
+POST /epics  { "title": "...", "description": "...", "statusId": "<id>", "workflowId": "<id>" }
+PATCH /epics/:id  { "title": "...", "description": "...", "statusId": "<id>" }
+DELETE /epics/:id
 ```
-
-### Create an epic
-```
-POST /epics
-{
-  "title": "Authentication Overhaul",
-  "description": "...",
-  "statusId": "<id>",
-  "workflowId": "<id>"
-}
-```
-`workflowId` is optional. Use `GET /workflows` to list available workflows (`"workflow-default"` for standard boards, `"workflow-worktree"` for git-integrated boards).
-
-### Update an epic
-```
-PATCH /epics/:id
-{ "title": "...", "description": "...", "statusId": "<id>" }
-```
+`workflowId` is optional. If omitted, the default workflow is assigned automatically. Use `GET /workflows` to list available workflows.
 
 ---
 
 ## Features
 
-Features belong to an epic and can optionally be linked to a repo and branch. The commit panel on the board shows commits for each feature's branch.
+Features belong to an epic and can be linked to a repo and branch. The commit panel on the board shows commits ahead of base for each feature branch.
 
-### List all features
 ```
 GET /features
-```
-
-### Create a feature
-```
-POST /features
-{
-  "epicId": "<id>",
-  "title": "JWT Token Issuance",
-  "description": "...",
-  "statusId": "<id>",
-  "repoId": "<repo id>",
-  "branchName": "feat/jwt-issuance"
-}
-```
-`repoId` and `branchName` are optional. When set, the feature's commit history is shown in the board's right panel (commits ahead of `repo.baseBranch`).
-
-### Update a feature
-```
-PATCH /features/:id
-{ "title": "...", "description": "...", "statusId": "<id>", "repoId": "<id>", "branchName": "feat/..." }
+POST /features  { "epicId": "<id>", "title": "...", "description": "...", "statusId": "<id>", "repoId": "<id>", "branchName": "feat/..." }
+PATCH /features/:id  { "title": "...", "repoId": "<id>", "branchName": "feat/..." }
+DELETE /features/:id
 ```
 
 ### Get commit history for a feature's branch
 ```
 GET /features/:id/commits
 ```
-Returns up to 50 commits on `feature.branchName` that are not on `repo.baseBranch`. Requires `repoId` and `branchName` to be set on the feature.
+Returns up to 50 commits on `feature.branchName` not on `repo.baseBranch`. Requires `repoId` and `branchName` to be set.
 
 ### Get a specific commit diff
 ```
@@ -303,140 +260,101 @@ GET /features/:id/commits/:hash
 ```
 Returns `{ hash, author, subject, date, diff }`.
 
+### Get latest build result
+```
+GET /features/:id/build
+```
+Returns `{ id, featureId, status, output, triggeredAt, completedAt }` or `null`. `status` is `"running"`, `"passed"`, or `"failed"`.
+
+### Trigger a build
+```
+POST /features/:id/build
+```
+Runs the repo's `buildCommand` in a temporary worktree asynchronously. Returns `{ buildId, status: "running" }` immediately. Progress is pushed via `build:started` and `build:completed` WebSocket events. Requires the repo to have `buildCommand` set.
+
 ---
 
 ## Repos
 
-Repos represent git repositories that agents can create worktrees in. Managed via the admin panel.
-
-### List all repos
 ```
 GET /repos
+POST /repos  { "name": "...", "path": "/abs/path/to/repo", "baseBranch": "main", "buildCommand": "bun run build" }
+PATCH /repos/:id  { "baseBranch": "...", "buildCommand": "..." }
+DELETE /repos/:id
 ```
-Returns `[{ id, name, path, baseBranch, compareBase }]`. `baseBranch` is the trunk branch (e.g. `main`) used as the comparison base for feature commit ranges. `compareBase` is a legacy field; feature branches now use `baseBranch` as their base automatically.
+
+`baseBranch` is the trunk branch used as the comparison base for feature commit ranges and merge targets. `buildCommand` is optional — when set, a Run Build button appears in the commit panel for features linked to this repo.
 
 ---
 
 ## Worktrees
 
-Worktrees allow agents to work on isolated git branches. The orchestrator sets everything up; the sub-agent just works in the provided directory.
+Worktrees allow agents to work on isolated git branches. The orchestrator sets everything up; sub-agents just work in the provided directory.
 
 ### Orchestrator setup sequence
-
-When kicking off a worktree-based task, the orchestrator should:
 
 **1. Resolve the repo**
 ```
 GET /repos
 ```
-Find the repo matching the codebase the agent will work in. Note its `id` and `baseBranch` (the trunk, e.g. `main`).
 
-**2. Create the feature (if it doesn't exist) with repo + branch info**
+**2. Create the feature with repo + branch info**
 ```
 POST /features
-{
-  "epicId": "<epic id>",
-  "title": "My Feature",
-  "repoId": "<repo id>",
-  "branchName": "feat/my-feature"
-}
+{ "epicId": "<id>", "title": "My Feature", "repoId": "<id>", "branchName": "feat/my-feature" }
 ```
-This links the feature to the branch so commit history appears in the UI. Use a descriptive branch name scoped to the feature (e.g. `feat/auth-jwt`, `fix/login-bug`).
 
 **3. Create a card for the agent**
 ```
 POST /cards
-{
-  "featureId": "<feature id>",
-  "title": "Implement JWT issuance",
-  "type": "task",
-  "statusId": "<To Do id>",
-  "agentId": "implementer-1"
-}
+{ "featureId": "<feature id>", "title": "Implement JWT issuance", "type": "task", "statusId": "<To Do id>", "agentId": "implementer-1" }
 ```
 
 **4. Create the worktree**
 ```
 POST /worktrees
-{
-  "cardId": "<card id>",
-  "repoId": "<repo id>",
-  "branchName": "feat/my-feature",
-  "baseBranch": "main"
-}
+{ "cardId": "<card id>", "repoId": "<repo id>", "branchName": "feat/my-feature" }
 ```
-This runs `git worktree add -b feat/my-feature` in the repo directory and stamps `branchName` + `repoId` on the card. The response includes the `worktreePath` — the absolute directory the agent should work in.
+Runs `git worktree add` and stamps `branchName` + `repoId` on the card. If the feature has a `branchName` set, that branch is created first (if it doesn't exist) and used as the base. The response includes `worktreePath` — pass this to the sub-agent as its working directory.
 
-**5. Spawn the sub-agent with the worktree path**
-Pass `worktreePath` from the response as the working directory for the sub-agent. Tell the agent:
-- The card ID to claim
-- The worktree path to work in
-- The branch name (for commit messages, PR context, etc.)
-- The repo's `baseBranch` so they know what they're branching from
+**5. Spawn the sub-agent** with the `worktreePath`, card ID, branch name, and `baseBranch`.
 
 ### Sub-agent responsibilities
 
-Once inside a worktree, the agent should:
 1. Claim the card: `POST /cards/:id/claim`
-2. Do the work in the provided `worktreePath` — all changes are isolated to this branch
-3. Post comments on the card as work progresses
-4. When done, move the card to "Ready to Merge" (or equivalent) — **do not merge the branch yourself**. Merging is a human action performed in the UI.
+2. Work in the provided `worktreePath` — all changes are isolated to this branch
+3. Post comments as work progresses
+4. When done, move the card to "Ready to Merge" (or equivalent `triggersMerge` status) — **do not merge yourself**
+5. If `conflictedAt` is set after moving to `triggersMerge`: rebase your branch, then `PATCH /cards/:id { "conflictedAt": null }` and move back to the `triggersMerge` status to re-check
 
 ### Teardown (orchestrator)
-
-After the user merges or abandons the branch:
 ```
 DELETE /worktrees/:branchName?repoId=<id>
 ```
 Runs `git worktree remove --force` and `git branch -D`. Clears `branchName` from the card.
 
-### View a card's diff
-```
-GET /cards/:id/diff
-```
-Returns `{ diff, stat, branchName }` — the full diff of the branch against its base. Useful for orchestrators reviewing work before signalling it's ready.
-
 ---
 
 ## Workflows
 
-### List all workflows
 ```
 GET /workflows
 ```
-Returns `[{ id, name, type }]`. Two are seeded: `"workflow-default"` (standard) and `"workflow-worktree"` (includes Ready to Merge with `triggersMerge: true`).
+Returns `[{ id, name, type }]`. Two are seeded: a Default workflow and a Worktree workflow (includes "Ready to Merge" with `triggersMerge: true`).
 
-### List statuses for a workflow
 ```
 GET /workflows/:id/statuses
 ```
-Returns `[{ id, workflowId, statusId, position, triggersMerge, name, color }]` — the ordered columns for that workflow.
+Returns `[{ id, workflowId, statusId, position, triggersMerge, name, color }]`.
 
-### Add a status to a workflow
 ```
-POST /workflows/:id/statuses
-{ "statusId": "<status id>", "triggersMerge": false }
-```
-Appends the status at the end of the workflow. `triggersMerge` is optional (default false).
-
-### Remove a status from a workflow
-```
+POST /workflows/:id/statuses   { "statusId": "<id>", "triggersMerge": false }
 DELETE /workflows/:id/statuses/:wsId
-```
-`:wsId` is the `id` field from the workflow status row (not the status id).
-
-### Reorder a workflow status
-```
-PATCH /workflows/:id/statuses/:wsId/position
-{ "position": 2 }
+PATCH /workflows/:id/statuses/:wsId/position   { "position": 2 }
+PATCH /workflows/:id/statuses/:wsId/merge      { "triggersMerge": true }
 ```
 
-### Toggle merge trigger
-```
-PATCH /workflows/:id/statuses/:wsId/merge
-{ "triggersMerge": true }
-```
-Marks a status as the merge point in the UI. The actual merge is performed by the user — agents should move the card to this status to signal readiness, not attempt to merge directly.
+A status with `triggersMerge: true` is the signal point for merge readiness. Moving a card with a `branchName` to this status automatically triggers a conflict check — no merge is performed.
 
 ---
 
@@ -444,19 +362,20 @@ Marks a status as the merge point in the UI. The actual merge is performed by th
 
 Rules control which agents can move cards to which statuses. If no rules exist, all moves are allowed.
 
-### List all rules
 ```
 GET /transition-rules
+POST /transition-rules  { "agentPattern": "implementer*", "fromStatusId": "<id>", "toStatusId": "<id>" }
+DELETE /transition-rules/:id
 ```
-Returns `[{ id, agentPattern, fromStatusId, toStatusId }]`. `null` means "any".
+`agentPattern` is a glob. `fromStatusId: null` means "any current status". Rules only apply when `agentId` is included in the PATCH.
 
 ---
 
 ## Tips
 
 - Always claim a card before working on it.
-- Post a comment when you start, when you hit a decision point, and when you finish.
-- Use `GET /cards/:id/allowed-statuses?agentId=<you>` before changing status — it tells you exactly what moves are available to you.
-- When in doubt about anything, use `POST /input`. The user prefers being asked over having you guess.
-- `timeoutSecs` defaults to 900 (15 min). For non-urgent questions you can increase it; for quick confirmations leave it at default.
-- Check `GET /queue?agentId=<you>&status=pending` at the start of each turn before doing any other work.
+- Post a comment when you start, at each decision point, and when you finish.
+- Use `GET /cards/:id/allowed-statuses?agentId=<you>` before changing status.
+- When in doubt, use `POST /input`. The user prefers being asked over guessing.
+- `GET /queue?agentId=<you>&status=pending` — **both filters together**. Using only `status=pending` returns messages for all agents.
+- After moving a card to a `triggersMerge` status, check whether `conflictedAt` is set before considering the task done.

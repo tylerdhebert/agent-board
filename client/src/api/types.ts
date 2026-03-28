@@ -33,7 +33,7 @@ export interface Feature {
 
 export interface Card {
   id: string;
-  featureId: string | null;
+  featureId: string;
   epicId: string | null;
   repoId?: string | null;
   type: "story" | "bug" | "task";

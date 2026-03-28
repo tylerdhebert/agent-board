@@ -100,7 +100,7 @@ export function initDb() {
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS cards (
       id TEXT PRIMARY KEY,
-      feature_id TEXT REFERENCES features(id),
+      feature_id TEXT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
       epic_id TEXT REFERENCES epics(id),
       repo_id TEXT REFERENCES repos(id),
       type TEXT NOT NULL DEFAULT 'task' CHECK(type IN ('story','bug','task')),

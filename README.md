@@ -1,67 +1,69 @@
 # agent-board
 
-A full-stack local task board for monitoring and coordinating AI agents. Agents create cards, post progress, move work through statuses, and pause to ask you questions directly in the UI. You can message agents between turns via the built-in chat system, and everything updates in real time over WebSocket.
+A full-stack local task board for monitoring and coordinating AI agents. Agents create cards, post progress, move work through statuses, pause to ask you questions, and get blocked on dependency cards — all surfaced in real time. You can message agents between turns via the built-in chat system.
 
 ---
 
 ## Setup
 
 ```bash
-# Install dependencies
-cd server && bun install
-cd ../client && bun install
-
-# Start both (in separate terminals)
-cd server && bun run dev
-cd ../client && bun run dev
+bun install          # from root, installs all workspaces
+bun run dev          # starts both server and client
 ```
 
-- **API** — `http://localhost:31377`
-- **UI** — `http://localhost:5173`
+Or individually:
+```bash
+cd server && bun run dev   # API on port 31377
+cd client && bun run dev   # UI on port 5173
+```
 
-The database is created automatically at `server/data/agent-board.db` on first run. Default statuses (To Do, In Progress, In Review, Needs Revision, Blocked, Done) are seeded on first startup.
+The database is created automatically at `data/agent-board.db` on first run. Default statuses and two seeded workflows (Default and Worktree) are created on first startup.
 
 ---
 
 ## What it does
 
 ### For you
-- A Kanban board showing all active agent work in real time via WebSocket
-- Audio + browser notifications when an agent needs your input
-- An input modal where you answer agent questions (yes/no, multiple choice, free text)
-- A **chat widget** (bottom-left docked bar) to message agents and read their replies — with unread badges and per-conversation thread windows
-- A hierarchy sidebar to filter cards by epic or feature
-- A **daily summary bar** showing what was completed today, with day navigation to browse past completions
-- An admin panel to manage statuses, epics, features, cards, and transition rules
+- **Kanban board** — real-time card tracking via WebSocket, grouped by epic/feature
+- **Input modal** — audio + browser notification when an agent needs your answer; supports yes/no, multiple choice, and free text questions
+- **Chat widget** — docked bar (bottom-left) with per-agent thread windows, unread badges, and reply support
+- **Hierarchy sidebar** — filter cards by epic or feature; cycling auto-expands/collapses
+- **Daily summary bar** — completed cards for today with day navigation to browse past sessions
+- **Diff viewer** — view a card's branch diff directly from the card modal
+- **Commit panel** — right-side panel showing commits ahead of base for each feature branch, with per-commit diff viewer
+- **Build status** — per-feature build trigger with live status badge and expandable output in the commit panel
+- **Card dependencies** — link cards as blockers; blocked cards show a lock icon on the board
+- **Merge conflict detection** — auto-runs `git merge-tree` when a card reaches a merge-trigger status; shows conflict details per file in a diff-style viewer
+- **Admin panel** — manage statuses, workflows, repos, epics, features, cards, transition rules, and keyboard shortcuts
 
 ### For agents
 - Create and update cards to represent their work
-- Post comments to narrate progress — the user reads these
+- Post comments to narrate progress
 - Claim cards to take ownership and auto-advance to In Progress
-- Check which status transitions are permitted before moving a card
-- Block execution and request user input — the HTTP call long-polls until you answer
-- Check for and reply to user messages via the queue/chat API at the start of each turn
+- Request user input — the HTTP call long-polls until you answer
+- Check for and reply to user messages via the queue API
+- Declare blockers on cards; the server emits `card:unblocked` when all blockers are cleared
+- Signal merge readiness by moving a card to a `triggersMerge` status — the server auto-checks for conflicts and marks the card with `conflictedAt` if found
+- Clear a conflict after rebasing by patching `conflictedAt: null`
 
 ---
 
 ## Integrating agents
 
-### The fast way — include AGENT_API.md in agent instructions
+### Include AGENT_API.md in agent instructions
 
-`AGENT_API.md` at the repo root is a concise HTTP reference written specifically for agents. Include it in any agent's system prompt or base instructions:
+`AGENT_API.md` is a concise HTTP reference written for agents. Include it in any agent's system prompt:
 
 ```
 You have access to a task board at http://localhost:31377.
-See the API reference below for how to use it.
+See the API reference below.
 
 <agent_api>
 [contents of AGENT_API.md]
 </agent_api>
 ```
 
-That's all an agent needs. It can create cards, post comments, update statuses, request input, and send/receive chat messages using plain HTTP calls.
-
-### Claude Code agents — use the slash command skills
+### Claude Code agents — slash command skills
 
 `.claude/commands/` contains Claude Code slash command skills:
 
@@ -86,28 +88,61 @@ That's all an agent needs. It can create cards, post comments, update statuses, 
 
 When an agent hits a decision it can't make alone, it calls `POST /api/input` with a list of questions. The HTTP request **blocks** — it stays open until you answer in the UI. The card moves to Blocked automatically while waiting.
 
-The UI surfaces an audio alert and a floating notification. You click it, answer the questions (yes/no, multiple choice, or free text), and the agent's execution resumes with your answers immediately.
+The UI surfaces an audio alert and a floating notification. You click it, answer the questions, and the agent's execution resumes with your answers immediately.
 
 ---
 
 ## Agent chat
 
-The chat widget (bottom-left docked bar) lets you exchange messages with any agent between turns.
+The chat widget (bottom-left) lets you exchange messages with any agent between turns.
 
-- **Fuzzy matching** — a message addressed to `"implementer"` is delivered to any agent whose id contains `"implementer"` as a substring (e.g. `implementer-1`, `implementer-frontend`).
-- **Unread badges** — the bar glows and shows a badge count when you have unread agent replies.
-- **Thread windows** — clicking a conversation opens a floating thread window. Multiple conversations can be open simultaneously, stacked to the right.
-- **Agents should poll** `GET /api/queue?agentId=<id>&status=pending` at the start of each turn before doing any work.
+- **Exact match** — `GET /queue?agentId=implementer-1` delivers only messages addressed to exactly `implementer-1`. Agent IDs must match precisely.
+- **Unread badges** — the bar glows and shows a badge count when you have unread agent replies. Clicking into an open thread window clears its badge.
+- **Thread windows** — clicking a conversation opens a floating thread window. Up to 3 visible simultaneously; overflow threads appear in a `+N more` bar.
+- **Agents should poll** `GET /api/queue?agentId=<id>&status=pending` at the start of each turn.
+
+---
+
+## Card dependencies
+
+Cards can declare blockers — other cards that must be Done before this one can proceed.
+
+- Blocked cards show a **lock icon** on the Kanban tile.
+- When the last blocker reaches Done, the server emits a `card:unblocked` WebSocket event.
+- Cascade delete: removing a card automatically removes all dependency rows it participates in.
+- Manage dependencies in the card modal's **Blockers** section.
+
+---
+
+## Merge conflict detection
+
+When a card moves to a status marked `triggersMerge: true` and has a `branchName` set, the server automatically runs `git merge-tree` against the target branch (feature branch, or repo base branch if no feature branch). No actual merge is performed.
+
+- If conflicts are found: `conflictedAt` is stamped on the card and the `card:conflicted` WS event fires. An amber warning badge appears on the card tile.
+- If clean: any previous conflict state is cleared.
+- The card modal shows a **View Conflicts** button that opens a per-file conflict diff viewer with conflict-marker highlighting.
+- **Resolver agents** rebase their branch, then clear the conflict by patching `conflictedAt: null`. Moving the card back to the `triggersMerge` status re-runs the check.
+
+---
+
+## Build status
+
+Repos can have a `buildCommand` configured. For any feature with a repo and branch set:
+
+- The **Branch Commits** panel shows a **Run Build** button.
+- Triggering a build creates a temporary worktree, runs the command in it, and streams the result back via WebSocket (`build:started`, `build:completed`).
+- A status badge (running / passed / failed) appears next to the button, with an expandable output panel.
+- Builds are **manual only** — they do not trigger automatically on status changes.
 
 ---
 
 ## Transition rules
 
-The admin panel has a **Rules** tab where you configure which agents can move cards to which statuses. Rules match agents by glob pattern (e.g. `implementer*`) and optionally restrict which status a card must be in before the move is allowed.
+The admin panel's **Rules** tab lets you configure which agents can move cards to which statuses. Rules match agents by glob pattern (e.g. `implementer*`) and optionally restrict which status a card must currently be in.
 
-If no rules are configured, all moves are permitted. Rules only apply when a card is moved with an `agentId` — admin moves through the UI are always allowed.
+If no rules exist, all moves are permitted. Rules only apply when a card is moved with an `agentId` — UI moves are always allowed.
 
-Agents should call `GET /api/cards/:id/allowed-statuses?agentId=<id>` before patching status to know what moves are available to them.
+Agents should call `GET /api/cards/:id/allowed-statuses?agentId=<id>` before patching status.
 
 ---
 
@@ -115,59 +150,63 @@ Agents should call `GET /api/cards/:id/allowed-statuses?agentId=<id>` before pat
 
 ```
 agent-board/
-├── server/                  # Bun + Elysia API
-│   └── src/
-│       ├── app.ts           # Elysia app builder, route mounting, exports App type
-│       ├── index.ts         # Entry point — calls app.listen()
-│       ├── db/
-│       │   ├── index.ts     # DB init, migrations, seeding
-│       │   └── schema.ts    # Drizzle table definitions + inferred types
-│       ├── routes/          # One file per resource
-│       │   ├── cards.ts     # CRUD, claim, comments, allowed-statuses
-│       │   ├── statuses.ts
-│       │   ├── epics.ts
-│       │   ├── features.ts
-│       │   ├── input.ts     # Long-poll user input
-│       │   ├── queue.ts     # Agent chat / message queue
-│       │   └── transitionRules.ts
-│       ├── types.ts         # Re-exports App type for client path alias
-│       ├── wsManager.ts     # WebSocket client registry + broadcast
-│       └── pollRegistry.ts  # Long-poll promise parking
+├── server/src/
+│   ├── app.ts               # Elysia app builder, route mounting, exports App type
+│   ├── index.ts             # Entry point — calls app.listen()
+│   ├── db/
+│   │   ├── index.ts         # DB init, migrations, seeding
+│   │   └── schema.ts        # Drizzle table definitions + inferred types
+│   ├── routes/
+│   │   ├── cards.ts         # CRUD, claim, comments, dependencies, diff, merge, allowed-statuses
+│   │   ├── statuses.ts
+│   │   ├── epics.ts
+│   │   ├── features.ts      # Commits, build trigger, build result
+│   │   ├── workflows.ts     # Workflow + workflow status management
+│   │   ├── repos.ts
+│   │   ├── worktrees.ts
+│   │   ├── input.ts         # Long-poll user input
+│   │   ├── queue.ts         # Agent chat / message queue
+│   │   ├── transitionRules.ts
+│   │   ├── shortcuts.ts
+│   │   └── fs.ts            # Filesystem browser for path picker
+│   ├── types.ts             # Re-exports App + WorkflowType for client path alias
+│   ├── wsManager.ts         # WebSocket client registry + broadcast
+│   ├── pollRegistry.ts      # Long-poll promise parking
+│   └── git.ts               # git() helper + worktree path util
 │
-├── client/                  # React + Vite frontend
-│   └── src/
-│       ├── components/
-│       │   ├── App.tsx
-│       │   ├── Board.tsx
-│       │   ├── ChatWidget.tsx       # Docked chat bar + thread windows
-│       │   ├── DailySummaryBar.tsx  # Footer bar — completed cards by day
-│       │   ├── Header.tsx
-│       │   ├── HierarchySidebar.tsx
-│       │   ├── CardModal.tsx
-│       │   ├── InputModal.tsx
-│       │   ├── InputNotificationBanner.tsx
-│       │   ├── AdminPanel.tsx
-│       │   ├── NotificationPrompt.tsx
-│       │   └── admin/              # Admin panel sections (one file each)
-│       ├── hooks/
-│       │   └── useWebSocket.ts
-│       ├── store/
-│       │   └── index.ts            # Zustand store
-│       └── api/
-│           ├── client.ts           # Eden treaty typed client + base URLs
-│           └── types.ts            # Shared TypeScript types
+├── client/src/
+│   ├── components/
+│   │   ├── Board.tsx                # Kanban board, blocked card detection
+│   │   ├── KanbanColumn.tsx
+│   │   ├── CardTile.tsx             # Blocked + conflict badges
+│   │   ├── CardModal.tsx            # Full card detail, blockers, conflict banner
+│   │   ├── ConflictDetailsModal.tsx # Per-file conflict diff viewer
+│   │   ├── DiffModal.tsx            # Branch diff viewer
+│   │   ├── CommitDiffModal.tsx      # Commit diff viewer
+│   │   ├── BaseBranchPanel.tsx      # Commit panel + build status
+│   │   ├── ChatWidget.tsx           # Docked chat bar + thread windows
+│   │   ├── InputModal.tsx
+│   │   ├── InputNotificationBanner.tsx
+│   │   ├── HierarchySidebar.tsx
+│   │   ├── DailySummaryBar.tsx
+│   │   ├── EpicPicker.tsx
+│   │   ├── PathPicker.tsx
+│   │   ├── AdminPanel.tsx
+│   │   └── admin/                   # Admin panel sections
+│   ├── hooks/
+│   │   ├── useWebSocket.ts
+│   │   ├── useKeyboardShortcuts.ts
+│   │   ├── useEscapeStack.ts
+│   │   └── useShortcutHint.ts
+│   ├── store/index.ts               # Zustand store
+│   └── api/
+│       ├── client.ts                # Eden treaty typed client + base URLs
+│       └── types.ts                 # Shared TypeScript types (imports WorkflowType from @server)
 │
 ├── data/                    # SQLite database (gitignored)
-├── docs/                    # Stack explainers
-│   ├── BUN.md
-│   ├── ELYSIA.md
-│   ├── DRIZZLE.md
-│   ├── TANSTACK_QUERY.md
-│   └── ZUSTAND.md
-│
-├── .claude/commands/        # Claude Code slash command skills (12 total)
 ├── AGENT_API.md             # HTTP reference for agents
-└── README.md
+├── AGENT_MANDATE.md         # Mandatory protocol for agents (include in system prompts)
+└── CLAUDE.md                # Guidance for Claude Code
 ```
 
 ---
@@ -176,28 +215,28 @@ agent-board/
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | [Bun](docs/BUN.md) |
-| API framework | [Elysia](docs/ELYSIA.md) |
+| Runtime | Bun |
+| API framework | Elysia |
 | Typed API client | Eden Treaty (`@elysiajs/eden`) |
 | Database | SQLite via `bun:sqlite`, WAL mode |
-| ORM | [Drizzle](docs/DRIZZLE.md) |
+| ORM | Drizzle ORM |
 | Frontend | React 19 + TypeScript + Vite + Tailwind v4 |
-| Server state | [TanStack Query v5](docs/TANSTACK_QUERY.md) |
-| UI state | [Zustand](docs/ZUSTAND.md) |
+| Server state | TanStack Query v5 |
+| UI state | Zustand |
 | Real-time | Native WebSocket (Elysia WS) |
 
 ---
 
-## How it works — brief technical notes
+## How it works
 
-**Eden Treaty** — the client uses `treaty<App>("localhost:31377")` which derives a fully typed API client directly from Elysia's `App` type. All HTTP calls go through the typed client (`api.api.cards.get()`, etc.) rather than raw fetch, giving end-to-end type safety from the database schema to the UI.
+**Eden Treaty** — the client uses `treaty<App>("localhost:31377")` which derives a fully typed API client directly from Elysia's `App` type. All HTTP calls go through the typed client rather than raw fetch, giving end-to-end type safety from the database schema to the UI. Drizzle enum columns (`text("col", { enum: [...] as const })`) flow through to the client as narrow union types.
 
-**Real-time updates** — every mutation broadcasts a WebSocket event immediately after the DB write. The client's `useWebSocket` hook invalidates the relevant TanStack Query caches on each event, so the UI updates within milliseconds without polling.
+**Real-time updates** — every mutation broadcasts a WebSocket event after the DB write. The client's `useWebSocket` hook invalidates the relevant TanStack Query caches on each event, so the UI updates within milliseconds without polling.
 
-**Long-poll input** — `POST /api/input` parks a Promise in `pollRegistry` (a `Map` of resolve/reject callbacks). The route handler `await`s it, suspending without blocking the event loop. When you submit answers, `POST /api/input/:id/answer` resolves the Promise and the original request returns.
+**Long-poll input** — `POST /api/input` parks a Promise in `pollRegistry`. The route handler `await`s it, suspending without blocking the event loop. When you submit answers, `POST /api/input/:id/answer` resolves the Promise and the original request returns.
 
-**Agent chat** — `GET /queue?agentId=X` uses a SQLite `LIKE '%' || lower(X) || '%'` query for fuzzy substring matching. Messages are ordered by `createdAt` ascending. Unread count for the chat bar badge only counts messages from agents (`author != 'user'`) with `status = 'pending'`.
+**Conflict detection** — when a card moves to a `triggersMerge` status, the server runs `git merge-base` then `git merge-tree <base> <target> <card-branch>` entirely in-memory. No working tree is touched. The full output is stored as `conflictDetails` on the card for display.
 
 **Migrations** — no migration runner. `initDb()` runs `CREATE TABLE IF NOT EXISTS` on every startup. New columns are added with `ALTER TABLE ... ADD COLUMN` in a try/catch (no-op if already present).
 
-**Server split** — `app.ts` builds and exports the Elysia app (and the `App` type used by Eden Treaty). `index.ts` is the entry point that calls `.listen()`. This split is necessary so the client can import the `App` type without pulling in Bun's runtime modules.
+**Server split** — `app.ts` builds and exports the Elysia app (and the `App` type). `index.ts` calls `.listen()`. This split lets the client import `App` via the `@server` path alias without pulling in Bun's native runtime modules.
