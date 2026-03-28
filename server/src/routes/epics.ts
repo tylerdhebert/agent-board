@@ -99,7 +99,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
   // Get commit log for a repo, scoped to an epic context
   .get(
     "/:id/commits",
-    ({ params, query, set }) => {
+    ({ query, set }) => {
       const repo = db.select().from(repos).where(eq(repos.id, query.repoId)).get();
       if (!repo) {
         set.status = 400;

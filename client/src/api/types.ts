@@ -1,4 +1,5 @@
 // Shared types mirroring the server schema — used on the client side
+import type { WorkflowType } from "@server";
 
 export interface Status {
   id: string;
@@ -119,7 +120,7 @@ export interface Repo {
 export interface Workflow {
   id: string;
   name: string;
-  type: string;
+  type: WorkflowType;
   createdAt: string;
 }
 

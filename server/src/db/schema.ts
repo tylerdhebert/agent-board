@@ -17,10 +17,13 @@ export const statuses = sqliteTable("statuses", {
 // ---------------------------------------------------------------------------
 // workflows
 // ---------------------------------------------------------------------------
+export const workflowTypes = ["default", "worktree"] as const;
+export type WorkflowType = (typeof workflowTypes)[number];
+
 export const workflows = sqliteTable("workflows", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  type: text("type").notNull().default("default"), // "default" | "worktree"
+  type: text("type", { enum: workflowTypes }).notNull().default("default"),
   createdAt: text("created_at").notNull(),
 });
 

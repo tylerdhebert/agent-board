@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
-import { readdirSync, statSync } from "fs";
-import { resolve, join, sep } from "path";
+import { readdirSync } from "fs";
+import { resolve, sep } from "path";
 import { homedir } from "os";
 
 export const fsRoutes = new Elysia({ prefix: "/fs" })

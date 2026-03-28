@@ -6,3 +6,4 @@
  * derive fully-typed API client calls with zero codegen.
  */
 export type { App } from "./app";
+export type { WorkflowType } from "./db/schema";

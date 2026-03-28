@@ -17,7 +17,6 @@ interface Props {
 
 export function PathPicker({ value, onChange, placeholder, invalid, className }: Props) {
   const [open, setOpen] = useState(false);
-  const [browsePath, setBrowsePath] = useState<string>("");
   const [result, setResult] = useState<BrowseResult | null>(null);
   const [loading, setLoading] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -33,7 +32,6 @@ export function PathPicker({ value, onChange, placeholder, invalid, className }:
       const res = await fetch(`${API_BASE}/fs/browse${params}`);
       const data: BrowseResult = await res.json();
       setResult(data);
-      setBrowsePath(data.path);
     } catch {
       // ignore
     } finally {
