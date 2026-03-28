@@ -95,6 +95,10 @@ No migration runner — new columns added to `CREATE TABLE IF NOT EXISTS` direct
 
 **PathPicker:** Component for filesystem path input with server-side directory browser. Fetches `GET /api/fs/browse?path=` which returns `{ path, sep, entries }`. Drill-down navigation with ↑ parent and Select current directory.
 
+## IMPORTANT: API Calls
+
+**Every API call in the client must go through the Eden treaty client (`api` from `api/client.ts`). Never use bare `fetch()` calls.** Eden treaty gives full type-safety from server routes to client without code generation. Hyphenated path segments use bracket notation: `(api.api.cards({ id }) as any)["recheck-conflicts"].post()`.
+
 ## Key Conventions
 
 - All UUIDs generated with `randomUUID()` from Node `crypto`

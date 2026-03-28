@@ -51,6 +51,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
           title: t.String(),
           description: t.String(),
           statusId: t.String(),
+          workflowId: t.String(),
         })
       ),
     }

@@ -3,6 +3,7 @@ import { db } from "../db";
 import { features, cards, repos, buildResults } from "../db/schema";
 import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { spawn } from "child_process";
 import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
 import { nowIso, updateAndBroadcast } from "../helpers/db";
@@ -181,20 +182,21 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
 
       (async () => {
         try {
-          // Create temp worktree
-          git(["worktree", "add", tmpPath, branchName], repoPath);
+          // Create temp worktree detached so it doesn't conflict with an existing worktree on the same branch
+          const wtResult = git(["worktree", "add", "--detach", tmpPath, branchName], repoPath);
+          if (wtResult.exitCode !== 0) throw new Error(`Failed to create build worktree: ${wtResult.stderr}`);
 
-          // Run build command via shell so compound commands work (e.g. "bun run build")
-          const proc = Bun.spawnSync(["cmd", "/c", buildCommand], {
-            cwd: tmpPath,
-            stdout: "pipe",
-            stderr: "pipe",
+          // Run build command asynchronously so the event loop stays free
+          const { exitCode, output: rawOutput } = await new Promise<{ exitCode: number; output: string }>((resolve) => {
+            const child = spawn(buildCommand, { shell: true, cwd: tmpPath, env: process.env });
+            let out = "";
+            child.stdout?.on("data", (d: Buffer) => { out += d.toString(); });
+            child.stderr?.on("data", (d: Buffer) => { out += d.toString(); });
+            child.on("close", (code) => resolve({ exitCode: code ?? 1, output: out }));
           });
 
-          const decoder = new TextDecoder();
-          const rawOutput = decoder.decode(proc.stdout) + decoder.decode(proc.stderr);
           const output = rawOutput.slice(0, 50000);
-          const status = (proc.exitCode ?? 1) === 0 ? "passed" : "failed";
+          const status = exitCode === 0 ? "passed" : "failed";
           const completedAt = nowIso();
 
           db.update(buildResults)

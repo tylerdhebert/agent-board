@@ -402,6 +402,11 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         return { error: "Card has no repo associated" };
       }
 
+      if (card.conflictedAt) {
+        set.status = 409;
+        return { conflict: true, message: "Card has unresolved conflicts. Rebase the branch and clear the conflict first." };
+      }
+
       const repo = db.select().from(repos).where(eq(repos.id, card.repoId)).get();
       if (!repo) {
         set.status = 400;
@@ -415,6 +420,10 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       const targetBranch = body.targetBranch ?? feature?.branchName ?? repo.baseBranch;
       const strategy = body.strategy ?? "merge";
       const branchName = card.branchName;
+
+      // Remove the worktree first so the branch is free to merge
+      const wtPath = worktreePath(repoPath, branchName);
+      git(["worktree", "remove", "--force", wtPath], repoPath);
 
       // Checkout target branch
       const checkoutResult = git(["checkout", targetBranch], repoPath);
@@ -446,9 +455,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         }
       }
 
-      // Cleanup: remove worktree and delete branch
-      const wtPath = worktreePath(repoPath, branchName);
-      git(["worktree", "remove", "--force", wtPath], repoPath);
+      // Cleanup: delete the branch
       git(["branch", "-D", branchName], repoPath);
 
       // Find "Done" status
@@ -478,6 +485,62 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         targetBranch: t.Optional(t.String()),
       }),
     }
+  )
+  // Re-check merge conflicts for a card's branch
+  .post(
+    "/:id/recheck-conflicts",
+    ({ params, set }) => {
+      const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
+      if (!card) { set.status = 404; return { error: "Not found" }; }
+      if (!card.branchName || !card.repoId) {
+        set.status = 400;
+        return { error: "Card has no branch or repo" };
+      }
+
+      const repo = db.select().from(repos).where(eq(repos.id, card.repoId)).get();
+      const feature = card.featureId
+        ? db.select().from(features).where(eq(features.id, card.featureId)).get()
+        : null;
+      const targetBranch = feature?.branchName ?? repo?.baseBranch;
+
+      if (!repo || !targetBranch) {
+        set.status = 400;
+        return { error: "Cannot determine target branch" };
+      }
+
+      const baseResult = git(["merge-base", targetBranch, card.branchName], repo.path);
+      const base = baseResult.stdout.trim();
+      if (!base) {
+        set.status = 400;
+        return { error: "Could not determine merge base" };
+      }
+
+      const mergeTreeResult = git(
+        ["merge-tree", base, targetBranch, card.branchName],
+        repo.path
+      );
+      const hasConflicts = mergeTreeResult.stdout.includes("<<<<<<<");
+
+      const now = nowIso();
+      if (hasConflicts) {
+        db.update(cards)
+          .set({ conflictedAt: now, conflictDetails: mergeTreeResult.stdout, updatedAt: now })
+          .where(eq(cards.id, params.id))
+          .run();
+        const updated = db.select().from(cards).where(eq(cards.id, params.id)).get()!;
+        wsManager.broadcast("card:conflicted", updated);
+        return { hasConflicts: true };
+      } else {
+        db.update(cards)
+          .set({ conflictedAt: null, conflictDetails: null, updatedAt: now })
+          .where(eq(cards.id, params.id))
+          .run();
+        const updated = db.select().from(cards).where(eq(cards.id, params.id)).get()!;
+        wsManager.broadcast("card:updated", updated);
+        return { hasConflicts: false };
+      }
+    },
+    { params: t.Object({ id: t.String() }) }
   )
   // Post comment on card
   .post(

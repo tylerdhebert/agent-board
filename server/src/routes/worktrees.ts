@@ -27,19 +27,20 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
           ? db.select().from(features).where(eq(features.id, card.featureId)).get()
           : null;
         if (feature?.branchName) {
-          // Create the feature branch if it doesn't exist yet
+          // Create the feature branch if it doesn't exist yet (without checking it out)
           const exists = git(["rev-parse", "--verify", feature.branchName], repo.path);
           if (exists.exitCode !== 0) {
-            git(["checkout", "-b", feature.branchName, repo.baseBranch], repo.path);
+            git(["branch", feature.branchName, repo.baseBranch], repo.path);
           }
           base = feature.branchName;
         }
       }
 
-      const result = git(
-        ["worktree", "add", "-b", body.branchName, wtPath, base],
-        repo.path
-      );
+      // If the card branch already exists, add the worktree without -b
+      const branchExists = git(["rev-parse", "--verify", body.branchName], repo.path);
+      const result = branchExists.exitCode === 0
+        ? git(["worktree", "add", wtPath, body.branchName], repo.path)
+        : git(["worktree", "add", "-b", body.branchName, wtPath, base], repo.path);
 
       if (result.exitCode !== 0) {
         set.status = 400;

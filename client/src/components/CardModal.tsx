@@ -140,6 +140,18 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
     },
   });
 
+  const recheckConflictMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await (api.api.cards({ id: selectedCardId! }) as any)["recheck-conflicts"].post();
+      if (error) throw new Error("Recheck failed");
+      return data as { hasConflicts: boolean };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["card", selectedCardId] });
+    },
+  });
+
   const handleClose = useCallback(() => {
     setOpenModal(null);
     setSelectedCardId(null);
@@ -311,6 +323,13 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                       className="px-2 py-0.5 bg-[#2d1500] border border-[#7f3500] hover:border-[#f59e0b] text-[#f59e0b] font-mono text-[11px] rounded-sm transition-colors"
                     >
                       View Conflicts
+                    </button>
+                    <button
+                      onClick={() => recheckConflictMutation.mutate()}
+                      disabled={recheckConflictMutation.isPending}
+                      className="px-2 py-0.5 bg-[#0d1014] border border-[#1e3a2a] hover:border-[#22c55e] disabled:opacity-50 text-[#22c55e] font-mono text-[11px] rounded-sm transition-colors"
+                    >
+                      {recheckConflictMutation.isPending ? "Checking..." : "Re-check"}
                     </button>
                     <button
                       onClick={() => clearConflictMutation.mutate()}

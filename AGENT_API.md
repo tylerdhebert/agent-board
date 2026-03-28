@@ -72,6 +72,10 @@ PATCH /cards/:id
 ```
 All fields are optional. When changing status, include your `agentId` so transition rules are enforced. Set `conflictedAt: null` to clear a merge conflict after rebasing.
 
+**Auto-managed fields (do not set manually):**
+- `completedAt` — stamped automatically when status moves to "Done"; cleared when moving away from "Done"
+- `conflictDetails` — populated with full `merge-tree` output when `conflictedAt` is set; cleared when `conflictedAt` is cleared
+
 **Conflict auto-check:** when `statusId` is set to a `triggersMerge` status and the card has a `branchName`, the server automatically runs `git merge-tree` to check for conflicts. If conflicts are found, `conflictedAt` is stamped and a `card:conflicted` event is broadcast. No merge is performed.
 
 ### Create a card
@@ -92,6 +96,14 @@ POST /cards
 ```
 DELETE /cards/:id
 ```
+
+### Re-check conflicts
+```
+POST /cards/:id/recheck-conflicts
+```
+Reruns `git merge-tree` against the card's current branch without requiring a status change. Updates `conflictedAt`/`conflictDetails` and broadcasts `card:conflicted` or `card:updated`. Use this after rebasing to confirm conflicts are resolved before clearing `conflictedAt` manually.
+
+Returns `{ hasConflicts: true|false }`. Requires card to have `branchName` and `repoId` set.
 
 ### Post a comment
 ```
@@ -163,7 +175,7 @@ POST /input
 }
 ```
 
-**This call blocks.** The request stays open until the user answers in the UI (or the timeout expires). Your card is automatically moved to "Blocked" while waiting.
+**This call blocks.** The request stays open until the user answers in the UI (or the timeout expires). Your card is automatically moved to "Blocked" while waiting — but only if a status named exactly `"Blocked"` (case-sensitive) exists in the board. `timeoutSecs` defaults to `900` (15 minutes).
 
 Response on answer:
 ```json
@@ -176,6 +188,19 @@ Response on timeout (HTTP 408):
 ```
 
 **Question types:** `text` (free-form, optional `default`), `yesno` (returns `"yes"` or `"no"`), `choice` (single-select from `options`).
+
+### List pending input requests
+```
+GET /input/pending
+```
+Returns all open (unanswered) input requests. The UI uses this to surface them; agents can poll this if they want to check whether a prior request was answered.
+
+### Answer an input request (UI/testing)
+```
+POST /input/:id/answer
+{ "answers": { "q1": "yes", "q2": "production" } }
+```
+Resolves the long-polling `POST /input` call with these answers. The UI calls this when the user submits their response. Agents generally do not call this directly.
 
 ---
 
@@ -230,7 +255,7 @@ Returns `[{ id, name, color, position }]`. Resolve status names to IDs before us
 ```
 GET /epics
 POST /epics  { "title": "...", "description": "...", "statusId": "<id>", "workflowId": "<id>" }
-PATCH /epics/:id  { "title": "...", "description": "...", "statusId": "<id>" }
+PATCH /epics/:id  { "title": "...", "description": "...", "statusId": "<id>", "workflowId": "<id>" }
 DELETE /epics/:id
 ```
 `workflowId` is optional. If omitted, the default workflow is assigned automatically. Use `GET /workflows` to list available workflows.
@@ -247,6 +272,8 @@ POST /features  { "epicId": "<id>", "title": "...", "description": "...", "statu
 PATCH /features/:id  { "title": "...", "repoId": "<id>", "branchName": "feat/..." }
 DELETE /features/:id
 ```
+
+**`branchName` on a feature is metadata only** — `POST /features` does not run any git commands. The branch is created lazily the first time `POST /worktrees` is called for a card under this feature. At that point, if the feature's branch doesn't exist yet, it is created from `repo.baseBranch`.
 
 ### Get commit history for a feature's branch
 ```
@@ -270,7 +297,7 @@ Returns `{ id, featureId, status, output, triggeredAt, completedAt }` or `null`.
 ```
 POST /features/:id/build
 ```
-Runs the repo's `buildCommand` in a temporary worktree asynchronously. Returns `{ buildId, status: "running" }` immediately. Progress is pushed via `build:started` and `build:completed` WebSocket events. Requires the repo to have `buildCommand` set.
+Runs the repo's `buildCommand` in a temporary worktree asynchronously. Returns `{ buildId, status: "running" }` immediately. Progress is pushed via `build:started` and `build:completed` WebSocket events. Requires the repo to have `buildCommand` set. Build output is truncated to 50,000 characters.
 
 ---
 
@@ -315,14 +342,18 @@ POST /cards
 POST /worktrees
 { "cardId": "<card id>", "repoId": "<repo id>", "branchName": "feat/my-feature" }
 ```
-Runs `git worktree add` and stamps `branchName` + `repoId` on the card. If the feature has a `branchName` set, that branch is created first (if it doesn't exist) and used as the base. The response includes `worktreePath` — pass this to the sub-agent as its working directory.
+Runs `git worktree add` and stamps `branchName` + `repoId` on the card. If the feature has a `branchName` set, that branch is created first (if it doesn't exist) and used as the base. The response includes `path` — pass this to the sub-agent as its working directory.
 
-**5. Spawn the sub-agent** with the `worktreePath`, card ID, branch name, and `baseBranch`.
+```json
+{ "path": "/abs/path/to/worktree", "branchName": "feat/my-feature", "cardId": "<id>" }
+```
+
+**5. Spawn the sub-agent** with the `path`, card ID, branch name, and `baseBranch`.
 
 ### Sub-agent responsibilities
 
 1. Claim the card: `POST /cards/:id/claim`
-2. Work in the provided `worktreePath` — all changes are isolated to this branch
+2. Work in the provided `path` — all changes are isolated to this branch
 3. Post comments as work progresses
 4. When done, move the card to "Ready to Merge" (or equivalent `triggersMerge` status) — **do not merge yourself**
 5. If `conflictedAt` is set after moving to `triggersMerge`: rebase your branch, then `PATCH /cards/:id { "conflictedAt": null }` and move back to the `triggersMerge` status to re-check
@@ -367,7 +398,7 @@ GET /transition-rules
 POST /transition-rules  { "agentPattern": "implementer*", "fromStatusId": "<id>", "toStatusId": "<id>" }
 DELETE /transition-rules/:id
 ```
-`agentPattern` is a glob. `fromStatusId: null` means "any current status". Rules only apply when `agentId` is included in the PATCH.
+`agentPattern` is a case-insensitive glob. `fromStatusId: null` means "any current status". Rules only apply when `agentId` is included in the PATCH.
 
 ---
 

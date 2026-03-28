@@ -35,3 +35,6 @@ Thumbs.db
 TODO.md
 MULTIUSER.md
 PLAN.md
+ORCHESTRATION_LESSONS.md
+agent-client/MIGRATION.md
+.claude/settings.json
