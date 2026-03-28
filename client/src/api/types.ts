@@ -43,6 +43,8 @@ export interface Card {
   agentId: string | null;
   branchName?: string | null;
   completedAt: string | null;
+  conflictedAt: string | null;
+  conflictDetails: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -196,7 +198,8 @@ export type WsEvent =
   | "queue:read"
   | "queue:deleted"
   | "build:started"
-  | "build:completed";
+  | "build:completed"
+  | "card:conflicted";
 
 export interface WsMessage {
   event: WsEvent;

@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards, comments, statuses, transitionRules, repos, features, cardDependencies } from "../db/schema";
+import { cards, comments, statuses, transitionRules, repos, features, cardDependencies, epics, workflowStatuses } from "../db/schema";
 import { eq, like, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
@@ -235,6 +235,54 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       if (!updated) throw new Error("Not found");
       wsManager.broadcast("card:updated", updated);
 
+      // Check for merge conflicts when moving to a triggersMerge status
+      if (body.statusId && updated.branchName && updated.repoId) {
+        const epic = updated.epicId
+          ? db.select().from(epics).where(eq(epics.id, updated.epicId)).get()
+          : null;
+        if (epic?.workflowId) {
+          const ws = db.select().from(workflowStatuses)
+            .where(and(
+              eq(workflowStatuses.workflowId, epic.workflowId),
+              eq(workflowStatuses.statusId, body.statusId)
+            ))
+            .get();
+          if (ws?.triggersMerge) {
+            const repo = db.select().from(repos).where(eq(repos.id, updated.repoId)).get();
+            const feature = updated.featureId
+              ? db.select().from(features).where(eq(features.id, updated.featureId)).get()
+              : null;
+            const targetBranch = feature?.branchName ?? repo?.baseBranch;
+            if (repo && targetBranch) {
+              const baseResult = git(["merge-base", targetBranch, updated.branchName], repo.path);
+              const base = baseResult.stdout.trim();
+              if (base) {
+                const mergeTreeResult = git(
+                  ["merge-tree", base, targetBranch, updated.branchName],
+                  repo.path
+                );
+                const hasConflicts = mergeTreeResult.stdout.includes("<<<<<<<");
+                const now2 = new Date().toISOString();
+                if (hasConflicts) {
+                  db.update(cards)
+                    .set({ conflictedAt: now2, conflictDetails: mergeTreeResult.stdout })
+                    .where(eq(cards.id, params.id))
+                    .run();
+                  const conflicted = db.select().from(cards).where(eq(cards.id, params.id)).get()!;
+                  wsManager.broadcast("card:conflicted", conflicted);
+                } else {
+                  // Clear any previous conflict state
+                  db.update(cards)
+                    .set({ conflictedAt: null, conflictDetails: null })
+                    .where(eq(cards.id, params.id))
+                    .run();
+                }
+              }
+            }
+          }
+        }
+      }
+
       // If card was moved to Done, check if any blocked-by-this-card cards are now fully unblocked
       if (body.statusId) {
         const newStatus = db.select().from(statuses).where(eq(statuses.id, body.statusId)).get();
@@ -277,6 +325,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
             t.Literal("bug"),
             t.Literal("task"),
           ]),
+          conflictedAt: t.Optional(t.Union([t.String(), t.Null()])),
         })
       ),
     }

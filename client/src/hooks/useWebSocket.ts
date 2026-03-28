@@ -64,6 +64,15 @@ export function useWebSocket() {
           }
           break;
 
+        case "card:conflicted":
+          queryClient.invalidateQueries({ queryKey: ["cards"] });
+          if (data && typeof data === "object" && "id" in data) {
+            queryClient.invalidateQueries({
+              queryKey: ["card", (data as { id: string }).id],
+            });
+          }
+          break;
+
         case "comment:created":
           if (data && typeof data === "object" && "cardId" in data) {
             const cardId = (data as { cardId: string }).cardId;

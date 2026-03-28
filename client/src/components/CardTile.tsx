@@ -52,13 +52,18 @@ export function CardTile({ card, status, blockedCardIds }: Props) {
       <div className="flex items-center gap-1.5 mb-2">
         <TypeBadge type={card.type} />
         <StatusBadge status={status} />
+        {card.conflictedAt && (
+          <span className="ml-auto text-[10px] font-mono text-[#f59e0b]" title="Merge conflict detected">
+            &#9888;
+          </span>
+        )}
         {isBlocked && (
-          <span className="ml-auto text-[10px] font-mono text-[#ef4444]" title="Blocked by dependencies">
+          <span className={`${card.conflictedAt ? "" : "ml-auto"} text-[10px] font-mono text-[#ef4444]`} title="Blocked by dependencies">
             &#128274;
           </span>
         )}
         {isPulsing && (
-          <span className={`${isBlocked ? "" : "ml-auto"} text-[10px] font-mono text-red-400 animate-pulse`}>
+          <span className={`${isBlocked || card.conflictedAt ? "" : "ml-auto"} text-[10px] font-mono text-red-400 animate-pulse`}>
             INPUT
           </span>
         )}

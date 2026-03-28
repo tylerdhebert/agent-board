@@ -109,6 +109,8 @@ export const cards = sqliteTable("cards", {
   agentId: text("agent_id"),
   branchName: text("branch_name"),
   completedAt: text("completed_at"),
+  conflictedAt: text("conflicted_at"),
+  conflictDetails: text("conflict_details"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

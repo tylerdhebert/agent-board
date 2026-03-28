@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type { CardWithComments, Status, WorkflowStatus, Card, DependencyInfo } from "../api/types";
 import { TypeBadge } from "./TypeBadge";
 import { DiffModal } from "./DiffModal";
+import { ConflictDetailsModal } from "./ConflictDetailsModal";
 
 interface Props {
   statuses: Status[];
@@ -22,6 +23,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [showConflicts, setShowConflicts] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
   const [selectedBlockerId, setSelectedBlockerId] = useState<string>("");
 
@@ -126,12 +128,23 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
     },
   });
 
+  const clearConflictMutation = useMutation({
+    mutationFn: async () => {
+      await api.api.cards({ id: selectedCardId! }).patch({ conflictedAt: null } as any);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["card", selectedCardId] });
+    },
+  });
+
   const handleClose = useCallback(() => {
     setOpenModal(null);
     setSelectedCardId(null);
     setSelectedStatusId(null);
     setShowDeleteConfirm(false);
     setShowDiff(false);
+    setShowConflicts(false);
     setMergeError(null);
   }, [setOpenModal, setSelectedCardId]);
 
@@ -282,6 +295,35 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                   </span>
                 </div>
               </div>
+
+              {/* Conflict banner */}
+              {card?.conflictedAt && (
+                <div className="rounded-sm border border-[#7f3500] bg-[#1f0d00] p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[#f59e0b] font-mono text-[10px] font-bold uppercase tracking-wider">
+                      &#9888; Merge conflict detected
+                    </span>
+                    <span className="text-[#64748b] font-mono text-[10px] ml-auto shrink-0">
+                      {formatTimestamp(card.conflictedAt)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => setShowConflicts(true)}
+                      className="px-2 py-0.5 bg-[#2d1500] border border-[#7f3500] hover:border-[#f59e0b] text-[#f59e0b] font-mono text-[11px] rounded-sm transition-colors"
+                    >
+                      View Conflicts
+                    </button>
+                    <button
+                      onClick={() => clearConflictMutation.mutate()}
+                      disabled={clearConflictMutation.isPending}
+                      className="px-2 py-0.5 bg-[#0d0d14] border border-[#2a2a38] hover:border-[#475569] disabled:opacity-50 text-[#64748b] font-mono text-[11px] rounded-sm transition-colors"
+                    >
+                      {clearConflictMutation.isPending ? "Clearing..." : "Clear conflict"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Description */}
               {card?.description && (
@@ -473,6 +515,13 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
         cardTitle={card.title}
         branchName={card.branchName}
         onClose={() => setShowDiff(false)}
+      />
+    )}
+
+    {showConflicts && card?.conflictedAt && (
+      <ConflictDetailsModal
+        card={card}
+        onClose={() => setShowConflicts(false)}
       />
     )}
     </>

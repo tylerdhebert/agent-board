@@ -29,7 +29,8 @@ export type WsEvent =
   | "card:dependency:added"
   | "card:dependency:removed"
   | "build:started"
-  | "build:completed";
+  | "build:completed"
+  | "card:conflicted";
 
 export interface WsMessage {
   event: WsEvent;

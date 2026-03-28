@@ -115,6 +115,10 @@ export function initDb() {
     )
   `);
 
+  // Migrations: add conflict detection columns to cards
+  try { sqlite.run(`ALTER TABLE cards ADD COLUMN conflicted_at TEXT`); } catch {}
+  try { sqlite.run(`ALTER TABLE cards ADD COLUMN conflict_details TEXT`); } catch {}
+
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS comments (
       id TEXT PRIMARY KEY,
