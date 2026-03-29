@@ -61,6 +61,8 @@ export const app = new Elysia()
       }
     },
   })
+  // Health check
+  .get("/api/health", () => ({ ok: true }))
   // REST API
   .group("/api", (app) =>
     app
