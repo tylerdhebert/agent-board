@@ -2,6 +2,8 @@
 
 Base URL: `http://localhost:31377/api`
 
+**Agent IDs** are arbitrary strings you choose (e.g. `"implementer-1"`). Pick one at the start of a task and use it consistently — it ties together card ownership, queue messages, and transition rules.
+
 ---
 
 ## Cards
@@ -48,7 +50,7 @@ POST /cards
 DELETE /cards/:id
 
 POST /cards/:id/recheck-conflicts          # reruns git merge-tree; returns { hasConflicts: bool }
-POST /cards/:id/comments  { "body": "...", "author": "agent" }
+POST /cards/:id/comments  { "body": "...", "author": "<your-agent-id>" }
 GET  /cards/:id/diff                       # { diff, stat, branchName }
 POST /cards/:id/merge  { "strategy": "merge|squash", "targetBranch": "feat/..." }
 ```
@@ -101,8 +103,8 @@ POST /input/:id/answer  { "answers": { "q1": "yes" } }   # UI use; agents genera
 
 ```
 GET  /queue?agentId=<your-id>&status=pending   # pending messages, oldest first; always include both params
-POST /queue  { "agentId": "implementer-1", "body": "...", "author": "implementer-1" }
-POST /queue/:id/read
+POST /queue  { "agentId": "<your-agent-id>", "body": "...", "author": "<your-agent-id>" }   # author makes it appear as your reply in the UI
+POST /queue/:id/read                           # call this for each message after processing; unread messages reappear every turn
 GET  /queue/conversations                      # [{ agentId, total, unread, lastAt }]
 ```
 
@@ -132,7 +134,7 @@ DELETE /repos/:id
 
 ```
 GET /features
-POST   /features      { "epicId": "<id>", "title": "...", "statusId": "<id>", "repoId": "<id>", "branchName": "feat/..." }
+POST   /features      { "epicId": "<id>", "title": "...", "statusId": "<id>", "repoId": "<id>", "branchName": "feat/..." }   # epicId required
 PATCH  /features/:id  { "title": "...", "repoId": "<id>", "branchName": "feat/..." }
 DELETE /features/:id
 GET    /features/:id/commits          # up to 50 commits on branch not on baseBranch
@@ -159,7 +161,7 @@ POST /cards  { "featureId": "<id>", "title": "...", "type": "task", "statusId": 
 # 4. Create worktree — returns { path, branchName, cardId }
 POST /worktrees  { "cardId": "<id>", "repoId": "<id>", "branchName": "feat/my-feature" }
 ```
-Pass the returned `path`, card ID, branch name, and `baseBranch` to the sub-agent.
+Pass the returned `path`, card ID, and branch name to the sub-agent, along with `baseBranch` from the repo (`GET /repos`).
 
 ### Sub-agent responsibilities
 1. `POST /cards/:id/claim`

@@ -8,9 +8,12 @@ Task board: `http://localhost:31377/api`. **Use it for every task, without excep
 2. `POST /cards/:id/claim` — claim it
 3. `GET /queue?agentId=<your-id>&status=pending` — check for messages
 
-If no card exists, create one first (`featureId` required — use `GET /features` to find or create one):
+If no card exists, create one first. Every card needs a feature, every feature needs an epic — create from the top down if needed:
 ```
-POST /cards  { "title": "...", "featureId": "<id>", "statusId": "<To Do id>", "type": "task", "agentId": "<your-id>" }
+GET /statuses                          # resolve status names to IDs
+POST /epics     { "title": "...", "statusId": "<id>" }
+POST /features  { "epicId": "<id>", "title": "...", "statusId": "<id>" }
+POST /cards     { "title": "...", "featureId": "<id>", "statusId": "<To Do id>", "type": "task", "agentId": "<your-id>" }
 ```
 
 ## While working
