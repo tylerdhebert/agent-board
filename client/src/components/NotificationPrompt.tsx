@@ -4,8 +4,9 @@ export function NotificationPrompt() {
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification !== "undefined" ? Notification.permission : "granted"
   );
+  const [dismissed, setDismissed] = useState(false);
 
-  if (permission === "granted") return null;
+  if (dismissed || permission !== "default") return null;
 
   const handleEnable = async () => {
     const result = await Notification.requestPermission();
@@ -13,8 +14,7 @@ export function NotificationPrompt() {
   };
 
   const handleDismiss = () => {
-    // Mark as "denied" locally so it goes away for this session
-    setPermission("denied");
+    setDismissed(true);
   };
 
   return (

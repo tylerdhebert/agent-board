@@ -76,6 +76,15 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
     params: t.Object({ id: t.String() }),
   })
 
+  // DELETE /api/queue/conversations/:agentId — delete all messages for a conversation
+  .delete("/conversations/:agentId", ({ params }) => {
+    db.delete(queueMessages).where(eq(queueMessages.agentId, params.agentId)).run();
+    wsManager.broadcast("queue:conversation-deleted", { agentId: params.agentId });
+    return { deleted: true };
+  }, {
+    params: t.Object({ agentId: t.String() }),
+  })
+
   // DELETE /api/queue/:id — delete a message
   .delete("/:id", ({ params }) => {
     db.delete(queueMessages).where(eq(queueMessages.id, params.id)).run();

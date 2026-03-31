@@ -177,6 +177,7 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
 // ---------------------------------------------------------------------------
 
 export function ChatWidget() {
+  const queryClient = useQueryClient();
   const chatOpen = useBoardStore((s) => s.chatOpen);
   const setChatOpen = useBoardStore((s) => s.setChatOpen);
   const summaryBarHeight = useBoardStore((s) => s.summaryBarHeight);
@@ -255,6 +256,16 @@ export function ChatWidget() {
     newAgentKey.length > 0 &&
     suggestions.length > 0 &&
     !(suggestions.length === 1 && suggestions[0] === newAgentKey);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (agentId: string) => {
+      await (api.api.queue.conversations as any)({ agentId }).delete();
+    },
+    onSuccess: (_, agentId) => {
+      setOpenThreads((prev) => prev.filter((id) => id !== agentId));
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
+  });
 
   const toggleThread = (agentId: string) => {
     setOpenThreads((prev) =>
@@ -471,9 +482,9 @@ export function ChatWidget() {
                 conversations.map((c) => {
                   const isOpen = openThreads.includes(c.agentId);
                   return (
-                    <button
+                    <div
                       key={c.agentId}
-                      className={`w-full flex items-center justify-between px-4 py-2.5 transition-colors text-left ${
+                      className={`group w-full flex items-center justify-between px-4 py-2.5 transition-colors cursor-pointer ${
                         isOpen ? "bg-[#22222e]" : "hover:bg-[#22222e]"
                       }`}
                       onClick={() => toggleThread(c.agentId)}
@@ -489,12 +500,22 @@ export function ChatWidget() {
                           </p>
                         </div>
                       </div>
-                      {c.unread > 0 && (
-                        <span className="ml-2 w-5 h-5 rounded-full bg-[#6366f1] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {c.unread}
-                        </span>
-                      )}
-                    </button>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {c.unread > 0 && (
+                          <span className="w-5 h-5 rounded-full bg-[#6366f1] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                            {c.unread}
+                          </span>
+                        )}
+                        <button
+                          className="text-[#475569] hover:text-[#ef4444] opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(c.agentId); }}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   );
                 })
               )}
