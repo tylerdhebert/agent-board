@@ -7,6 +7,37 @@ import { wsManager } from "../wsManager";
 import { pollRegistry } from "../pollRegistry";
 import { nowIso } from "../helpers/db";
 
+function restorePreviousStatus(cardId: string, previousStatusId: string | null | undefined) {
+  if (!previousStatusId) return;
+
+  const blockedStatus = db
+    .select()
+    .from(statuses)
+    .where(eq(statuses.name, "Blocked"))
+    .get();
+
+  if (!blockedStatus || previousStatusId === blockedStatus.id) return;
+
+  const card = db.select().from(cards).where(eq(cards.id, cardId)).get();
+  if (!card || card.statusId !== blockedStatus.id) return;
+
+  const updatedAt = nowIso();
+  db.update(cards)
+    .set({ statusId: previousStatusId, updatedAt })
+    .where(eq(cards.id, cardId))
+    .run();
+
+  const updatedCard = db
+    .select()
+    .from(cards)
+    .where(eq(cards.id, cardId))
+    .get();
+
+  if (updatedCard) {
+    wsManager.broadcast("card:updated", updatedCard);
+  }
+}
+
 export const inputRoutes = new Elysia({ prefix: "/input" })
   // Get all pending input requests
   .get("/pending", () => {
@@ -49,6 +80,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         .values({
           id: requestId,
           cardId,
+          previousStatusId: card.statusId,
           questions: JSON.stringify(questions),
           answers: null,
           status: "pending",
@@ -93,6 +125,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
               .set({ status: "timed_out" })
               .where(eq(inputRequests.id, requestId))
               .run();
+            restorePreviousStatus(cardId, card.statusId);
             wsManager.broadcast("input:timed_out", { requestId, cardId });
           }
         );
@@ -157,6 +190,8 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         })
         .where(eq(inputRequests.id, params.id))
         .run();
+
+      restorePreviousStatus(request.cardId, request.previousStatusId);
 
       // Resolve the waiting long-poll
       const resolved = pollRegistry.answer(params.id, body.answers);

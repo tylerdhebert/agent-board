@@ -124,6 +124,7 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS input_requests (
       id TEXT PRIMARY KEY,
       card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+      previous_status_id TEXT,
       questions TEXT NOT NULL,
       answers TEXT,
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','answered','timed_out')),
@@ -185,6 +186,13 @@ export function initDb() {
       default_shortcut TEXT
     )
   `);
+
+  // Lightweight schema migration for existing databases.
+  try {
+    sqlite.run(`ALTER TABLE input_requests ADD COLUMN previous_status_id TEXT`);
+  } catch {
+    // Column already exists.
+  }
 
   // Upsert shortcuts — INSERT OR IGNORE so existing user customizations are preserved
   const shortcutSeed = [

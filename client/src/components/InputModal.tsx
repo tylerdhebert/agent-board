@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
@@ -14,12 +14,8 @@ interface Props {
 export function InputModal({ request }: Props) {
   const queryClient = useQueryClient();
   const setOpenModal = useBoardStore((s) => s.setOpenModal);
-  const setActiveInputRequestId = useBoardStore(
-    (s) => s.setActiveInputRequestId
-  );
-  const removePendingInputRequest = useBoardStore(
-    (s) => s.removePendingInputRequest
-  );
+  const setActiveInputRequestId = useBoardStore((s) => s.setActiveInputRequestId);
+  const removePendingInputRequest = useBoardStore((s) => s.removePendingInputRequest);
   const removePulsingCard = useBoardStore((s) => s.removePulsingCard);
 
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
@@ -30,10 +26,7 @@ export function InputModal({ request }: Props) {
     return defaults;
   });
 
-  const secondsRemaining = useCountdown(
-    request.requestedAt,
-    request.timeoutSecs
-  );
+  const secondsRemaining = useCountdown(request.requestedAt, request.timeoutSecs);
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -57,103 +50,95 @@ export function InputModal({ request }: Props) {
 
   useEscapeToClose(handleClose);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Validate all questions answered
     const unanswered = request.questions.filter((q) => !answers[q.id]);
     if (unanswered.length > 0) return;
     submitMutation.mutate();
-  };
+  }
 
   const allAnswered = request.questions.every((q) => answers[q.id] !== undefined && answers[q.id] !== "");
-
-  const progressPct = (secondsRemaining / request.timeoutSecs) * 100;
+  const progressPct = Math.max(0, (secondsRemaining / request.timeoutSecs) * 100);
   const timedOut = secondsRemaining === 0;
+  const timerColor =
+    progressPct > 50 ? "var(--success)" : progressPct > 20 ? "var(--warning)" : "var(--danger)";
 
   return (
-    <ModalOverlay onClose={handleClose} className="max-w-lg flex flex-col overflow-hidden" >
-      <div
-        className="flex flex-col"
-        style={{ borderTop: "3px solid #ef4444" }}
-      >
-        {/* Countdown bar */}
-        <div className="h-1 bg-[#1a1a24] overflow-hidden">
+    <ModalOverlay onClose={handleClose} className="flex max-w-3xl flex-col overflow-hidden">
+      <div className="flex flex-col overflow-hidden rounded-[24px]">
+        <div className="h-1.5 bg-[var(--panel-ink)]">
           <div
             className="h-full transition-all duration-1000 ease-linear"
-            style={{
-              width: `${progressPct}%`,
-              backgroundColor: progressPct > 50 ? "#22c55e" : progressPct > 20 ? "#f59e0b" : "#ef4444",
-            }}
+            style={{ width: `${progressPct}%`, backgroundColor: timerColor }}
           />
         </div>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e2a]">
-          <div>
-            <h2 className="text-sm font-mono font-bold text-[#ef4444] uppercase tracking-wider">
-              Agent Input Required
-            </h2>
-            <p className="text-[10px] font-mono text-[#475569] mt-0.5">
-              card: <span className="text-[#94a3b8]">{request.cardId}</span>
-            </p>
-          </div>
-          <div className="text-right">
-            <span
-              className={`text-sm font-mono font-bold ${
-                secondsRemaining < 60
-                  ? "text-red-400"
-                  : secondsRemaining < 300
-                  ? "text-amber-400"
-                  : "text-[#94a3b8]"
-              }`}
-            >
-              {formatTime(secondsRemaining)}
-            </span>
-            <p className="text-[10px] font-mono text-[#475569]">remaining</p>
+        <div className="border-b border-[var(--border-soft)] px-5 py-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
+              <div className="section-kicker mb-3">
+                <span className="section-kicker__dot" />
+                Human Decision Required
+              </div>
+              <h2 className="display-title text-3xl leading-none">Agent Input</h2>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
+                The agent is paused on card <span className="text-[var(--text-primary)]">{request.cardId}</span> and needs a human answer to keep moving.
+              </p>
+            </div>
+
+            <div className="surface-panel surface-panel--soft min-w-[180px] px-4 py-3 text-right">
+              <div className="meta-label mb-2">Time Remaining</div>
+              <div className="text-2xl font-semibold" style={{ color: timerColor }}>
+                {formatTime(secondsRemaining)}
+              </div>
+              <div className="mt-1 text-[10px] uppercase tracking-[0.26em] text-[var(--text-faint)]">
+                response window
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Questions */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-5">
           {timedOut ? (
-            <div className="text-center py-6">
-              <p className="text-sm font-mono text-red-400">Request timed out.</p>
+            <div className="surface-panel px-5 py-8 text-center">
+              <div className="meta-label mb-3">Request Closed</div>
+              <p className="text-base text-[var(--danger)]">This input request timed out.</p>
               <button
                 type="button"
                 onClick={handleClose}
-                className="mt-3 text-xs font-mono text-[#475569] hover:text-[#94a3b8] transition-colors"
+                className="action-button action-button--ghost mt-4"
               >
                 Close
               </button>
             </div>
           ) : (
             <>
-              {request.questions.map((question, idx) => (
-                <QuestionField
-                  key={question.id}
-                  question={question}
-                  index={idx + 1}
-                  value={answers[question.id] ?? ""}
-                  onChange={(val) =>
-                    setAnswers((prev) => ({ ...prev, [question.id]: val }))
-                  }
-                />
-              ))}
+              <div className="grid gap-4">
+                {request.questions.map((question, idx) => (
+                  <QuestionField
+                    key={question.id}
+                    question={question}
+                    index={idx + 1}
+                    value={answers[question.id] ?? ""}
+                    onChange={(val) => setAnswers((prev) => ({ ...prev, [question.id]: val }))}
+                  />
+                ))}
+              </div>
 
-              <div className="pt-2 flex gap-2">
+              <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] pt-4 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="flex-1 py-2 border border-[#2a2a38] hover:border-[#3a3a4a] text-[#64748b] hover:text-[#94a3b8] font-mono text-xs rounded-sm transition-colors"
+                  className="action-button action-button--ghost"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!allAnswered || submitMutation.isPending}
-                  className="flex-1 py-2 bg-[#ef4444] hover:bg-[#f87171] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs font-bold rounded-sm transition-colors"
+                  className="action-button action-button--accent"
                 >
-                  {submitMutation.isPending ? "Submitting..." : "Submit Answers"}
+                  {submitMutation.isPending ? "Submitting" : "Submit Answers"}
                 </button>
               </div>
             </>
@@ -173,30 +158,34 @@ interface QuestionFieldProps {
 
 function QuestionField({ question, index, value, onChange }: QuestionFieldProps) {
   return (
-    <div className="space-y-1.5">
-      <label className="block text-xs font-mono text-[#e2e8f0]">
-        <span className="text-[#475569] mr-2">{index}.</span>
-        {question.prompt}
+    <div className="surface-panel px-4 py-4">
+      <label className="block">
+        <span className="meta-label">Question {index}</span>
+        <div className="mt-2 text-sm text-[var(--text-primary)]">{question.prompt}</div>
       </label>
 
       {question.type === "yesno" && (
-        <div className="flex gap-2">
-          {["yes", "no"].map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => onChange(opt)}
-              className={`flex-1 py-2 font-mono text-xs font-bold uppercase rounded-sm border transition-colors ${
-                value === opt
-                  ? opt === "yes"
-                    ? "bg-[#22c55e]/20 border-[#22c55e] text-[#22c55e]"
-                    : "bg-[#ef4444]/20 border-[#ef4444] text-[#ef4444]"
-                  : "border-[#2a2a38] text-[#64748b] hover:border-[#3a3a4a] hover:text-[#94a3b8]"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {["yes", "no"].map((opt) => {
+            const active = value === opt;
+            const yes = opt === "yes";
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => onChange(opt)}
+                className={`rounded-[18px] border px-4 py-3 text-left font-mono text-xs uppercase tracking-[0.2em] transition-colors ${
+                  active
+                    ? yes
+                      ? "border-[var(--success)] bg-[var(--success-soft)] text-[var(--success)]"
+                      : "border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger)]"
+                    : "border-[var(--border)] bg-[var(--panel-ink)] text-[var(--text-muted)] hover:border-[var(--accent-border)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {opt}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -206,26 +195,29 @@ function QuestionField({ question, index, value, onChange }: QuestionFieldProps)
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={question.default ?? "Enter your answer..."}
-          className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors"
+          className="field-shell mt-4 px-3 py-3 text-xs"
         />
       )}
 
       {question.type === "choice" && question.options && (
-        <div className="flex flex-wrap gap-2">
-          {question.options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => onChange(opt)}
-              className={`px-3 py-1.5 font-mono text-xs rounded-sm border transition-colors ${
-                value === opt
-                  ? "bg-[#6366f1]/20 border-[#6366f1] text-[#818cf8]"
-                  : "border-[#2a2a38] text-[#64748b] hover:border-[#3a3a4a] hover:text-[#94a3b8]"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {question.options.map((opt) => {
+            const active = value === opt;
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => onChange(opt)}
+                className={`rounded-full border px-3 py-2 font-mono text-xs transition-colors ${
+                  active
+                    ? "border-[var(--accent)] bg-[var(--accent-surface)] text-[var(--accent-strong)]"
+                    : "border-[var(--border)] bg-[var(--panel-ink)] text-[var(--text-muted)] hover:border-[var(--accent-border)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {opt}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

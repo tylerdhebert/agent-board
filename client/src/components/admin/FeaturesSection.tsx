@@ -2,7 +2,20 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Epic, Feature, Repo } from "../../api/types";
-import { inputCls, selectCls, sectionHeadingCls, cancelBtnCls, primaryBtnCls } from "./adminStyles";
+import {
+  adminActionLinkCls,
+  adminEditShellCls,
+  adminItemMetaCls,
+  adminItemSubtleCls,
+  adminItemTitleCls,
+  adminListItemCls,
+  emptyStateCls,
+  inputCls,
+  selectCls,
+  sectionHeadingCls,
+  cancelBtnCls,
+  primaryBtnCls,
+} from "./adminStyles";
 import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 interface EditState {
@@ -150,7 +163,6 @@ export function FeaturesSection() {
 
   return (
     <div className="space-y-6">
-      {/* Create form */}
       <div>
         <h3 className={sectionHeadingCls}>Create Feature</h3>
         <form onSubmit={handleCreate} className="space-y-2">
@@ -171,7 +183,7 @@ export function FeaturesSection() {
           <select
             value={selectedEpicId}
             onChange={(e) => setSelectedEpicId(e.target.value)}
-            className={selectCls + (createAttempted && !selectedEpicId ? " border-[#f87171]" : "")}
+            className={selectCls + (createAttempted && !selectedEpicId ? " border-[var(--danger)]" : "")}
           >
             <option value="">Select epic</option>
             {epics.map((epic) => (
@@ -211,13 +223,12 @@ export function FeaturesSection() {
         </form>
       </div>
 
-      {/* Existing features */}
       <div>
         <h3 className={sectionHeadingCls}>Existing Features ({features.length})</h3>
         {features.length === 0 ? (
-          <p className="text-[11px] font-mono text-[#334155]">No features yet.</p>
+          <p className={emptyStateCls}>No features yet.</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {features.map((feature) => {
               const epic = feature.epicId ? epicForFeature(feature.epicId) : null;
               const repo = repoForFeature(feature.repoId);
@@ -227,10 +238,7 @@ export function FeaturesSection() {
 
               if (isEditing) {
                 return (
-                  <div
-                    key={feature.id}
-                    className="bg-[#0d0d14] border border-[#2a2a4a] rounded-sm px-3 py-3 space-y-2"
-                  >
+                  <div key={feature.id} className={adminEditShellCls}>
                     <input
                       type="text"
                       value={editState.title}
@@ -248,7 +256,7 @@ export function FeaturesSection() {
                     <select
                       value={editState.epicId}
                       onChange={(e) => setEditState((s) => ({ ...s, epicId: e.target.value }))}
-                      className={selectCls + (editAttempted && !editState.epicId ? " border-[#f87171]" : "")}
+                      className={selectCls + (editAttempted && !editState.epicId ? " border-[var(--danger)]" : "")}
                     >
                       <option value="">Select epic</option>
                       {epics.map((epic) => (
@@ -280,7 +288,10 @@ export function FeaturesSection() {
                     </div>
                     <div className="flex justify-end gap-2">
                       <button
-                        onClick={() => { setEditingId(null); setEditAttempted(false); }}
+                        onClick={() => {
+                          setEditingId(null);
+                          setEditAttempted(false);
+                        }}
                         className={cancelBtnCls}
                       >
                         Cancel
@@ -298,33 +309,28 @@ export function FeaturesSection() {
               }
 
               return (
-                <div
-                  key={feature.id}
-                  className="bg-[#0d0d14] border border-[#1e1e2a] rounded-sm px-3 py-2 flex items-start gap-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-mono text-[#e2e8f0]">{feature.title}</p>
+                <div key={feature.id} className={adminListItemCls}>
+                  <div className="min-w-0 flex-1">
+                    <p className={adminItemTitleCls}>{feature.title}</p>
                     {epic && (
-                      <p className="text-[11px] font-mono text-[#6366f1] mt-0.5">
-                        {epic.title}
-                      </p>
+                      <p className={adminItemMetaCls}>{epic.title}</p>
                     )}
                     {(repo || feature.branchName) && (
-                      <p className="text-[10px] font-mono text-[#475569] mt-0.5">
+                      <p className={adminItemSubtleCls}>
                         {repo && <span>{repo.name}</span>}
-                        {repo && feature.branchName && <span className="text-[#334155]"> / </span>}
-                        {feature.branchName && <span className="text-[#818cf8]">⎇ {feature.branchName}</span>}
+                        {repo && feature.branchName && <span> / </span>}
+                        {feature.branchName && <span>branch {feature.branchName}</span>}
                       </p>
                     )}
-                    <p className="text-[10px] font-mono text-[#334155] mt-0.5">
+                    <p className={adminItemSubtleCls}>
                       {cCount} card{cCount !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     {!isConfirming && (
                       <button
                         onClick={() => startEdit(feature)}
-                        className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                        className={adminActionLinkCls}
                       >
                         Edit
                       </button>

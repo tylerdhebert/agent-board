@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { KeyboardShortcut } from "../../api/types";
 
@@ -16,7 +16,7 @@ function eventToKey(e: KeyboardEvent): string {
 
 export function ShortcutsSection() {
   const queryClient = useQueryClient();
-  const [capturing, setCapturing] = useState<string | null>(null); // action id being rebound
+  const [capturing, setCapturing] = useState<string | null>(null);
   const [captured, setCaptured] = useState<string | null>(null);
 
   const { data: shortcuts = [] } = useQuery<KeyboardShortcut[]>({
@@ -42,7 +42,6 @@ export function ShortcutsSection() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shortcuts"] }),
   });
 
-  // Capture key press when in capture mode
   useEffect(() => {
     if (!capturing) return;
     const handler = (e: KeyboardEvent) => {
@@ -60,19 +59,18 @@ export function ShortcutsSection() {
     return () => window.removeEventListener("keydown", handler, true);
   }, [capturing]);
 
-  const saveCapture = (id: string) => {
+  function saveCapture(id: string) {
     if (!captured) return;
     updateMutation.mutate({ id, shortcut: captured });
     setCapturing(null);
     setCaptured(null);
-  };
+  }
 
-  const cancelCapture = () => {
+  function cancelCapture() {
     setCapturing(null);
     setCaptured(null);
-  };
+  }
 
-  // Group shortcuts
   const groups = shortcuts.reduce<Record<string, KeyboardShortcut[]>>((acc, s) => {
     if (!acc[s.group]) acc[s.group] = [];
     acc[s.group].push(s);
@@ -81,67 +79,69 @@ export function ShortcutsSection() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-[12px] font-mono text-[#475569]">
-          Click a binding to rebind. Press Escape to cancel capture.
-        </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[12px] font-mono text-[var(--text-faint)]">Click a binding to rebind it. Press Escape to cancel capture.</p>
         <button
+          type="button"
           onClick={() => resetMutation.mutate()}
           disabled={resetMutation.isPending}
-          className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] border border-[#2a2a38] px-3 py-1 rounded transition-colors disabled:opacity-40"
+          className="action-button action-button--muted"
         >
-          Reset all to defaults
+          Reset All
         </button>
       </div>
 
       {Object.entries(groups).map(([group, items]) => (
         <div key={group}>
-          <p className="text-[10px] font-mono text-[#475569] uppercase tracking-wider mb-2">{group}</p>
-          <div className="divide-y divide-[#1e1e2a] border border-[#1e1e2a] rounded">
-            {items.map((s) => {
+          <p className="meta-label mb-2">{group}</p>
+          <div className="surface-panel overflow-hidden">
+            {items.map((s, index) => {
               const isCapturing = capturing === s.id;
               return (
-                <div key={s.id} className="flex items-center justify-between px-3 py-2.5 gap-4">
-                  <span className="text-[13px] font-mono text-[#e2e8f0] flex-1">{s.label}</span>
-                  <div className="flex items-center gap-2 shrink-0">
+                <div
+                  key={s.id}
+                  className={`flex items-center justify-between gap-4 px-4 py-3 ${index > 0 ? "border-t border-[var(--border-soft)]" : ""}`}
+                >
+                  <span className="flex-1 text-[13px] font-mono text-[var(--text-primary)]">{s.label}</span>
+                  <div className="flex shrink-0 items-center gap-2">
                     {isCapturing ? (
                       <>
                         <button
-                          className="text-[11px] font-mono px-3 py-1 border border-[#6366f1] rounded text-[#818cf8] min-w-[120px] text-center animate-pulse"
+                          type="button"
+                          className="rounded-full border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2 text-[11px] font-mono text-[var(--accent-strong)] animate-pulse min-w-[140px]"
                           onClick={captured ? () => saveCapture(s.id) : undefined}
                         >
                           {captured ? captured : "press a key..."}
                         </button>
                         {captured && (
-                          <button
-                            className="text-[11px] font-mono px-2 py-1 bg-[#6366f1] hover:bg-[#818cf8] text-white rounded transition-colors"
-                            onClick={() => saveCapture(s.id)}
-                          >
-                            save
+                          <button type="button" className="action-button action-button--accent !px-3 !py-1.5" onClick={() => saveCapture(s.id)}>
+                            Save
                           </button>
                         )}
-                        <button
-                          className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] transition-colors"
-                          onClick={cancelCapture}
-                        >
-                          cancel
+                        <button type="button" className="text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)]" onClick={cancelCapture}>
+                          Cancel
                         </button>
                       </>
                     ) : (
                       <>
                         <button
-                          className="text-[11px] font-mono px-3 py-1 border border-[#2a2a38] rounded text-[#94a3b8] hover:border-[#6366f1] hover:text-[#818cf8] transition-colors min-w-[80px] text-center"
-                          onClick={() => { setCapturing(s.id); setCaptured(null); }}
+                          type="button"
+                          className="rounded-full border border-[var(--border)] px-3 py-2 text-[11px] font-mono text-[var(--text-secondary)] transition-colors hover:border-[var(--accent-border)] hover:text-[var(--accent-strong)] min-w-[92px]"
+                          onClick={() => {
+                            setCapturing(s.id);
+                            setCaptured(null);
+                          }}
                         >
-                          {s.shortcut ?? "—"}
+                          {s.shortcut ?? "-"}
                         </button>
                         {s.shortcut && (
                           <button
-                            className="text-[10px] font-mono text-[#334155] hover:text-[#475569] transition-colors"
+                            type="button"
+                            className="text-[10px] font-mono text-[var(--text-dim)] hover:text-[var(--danger)] transition-colors"
                             onClick={() => updateMutation.mutate({ id: s.id, shortcut: null })}
                             title="Clear shortcut"
                           >
-                            ✕
+                            Clear
                           </button>
                         )}
                       </>

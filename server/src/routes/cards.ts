@@ -1,7 +1,7 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
 import { cards, comments, statuses, transitionRules, repos, features, cardDependencies, epics, workflowStatuses } from "../db/schema";
-import { eq, like, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
@@ -13,9 +13,11 @@ function agentPatternMatch(pattern: string, agentId: string): boolean {
   return regex.test(agentId);
 }
 
-/** Returns the current time as an ISO 8601 string. */
-function nowIso(): string {
-  return new Date().toISOString();
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -134,8 +136,12 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
   )
   // Cards completed today (local date prefix match on completed_at)
   .get("/completed-today", () => {
-    const today = nowIso().slice(0, 10); // "YYYY-MM-DD"
-    return db.select().from(cards).where(like(cards.completedAt, `${today}%`)).all();
+    const today = localDateKey(new Date());
+    return db
+      .select()
+      .from(cards)
+      .all()
+      .filter((card) => card.completedAt && localDateKey(new Date(card.completedAt)) === today);
   })
   // Get single card with comments
   .get(
@@ -553,7 +559,6 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .get();
       if (!card) throw new Error("Card not found");
       const id = randomUUID();
-      const now = nowIso();
       const row = {
         id,
         cardId: params.id,

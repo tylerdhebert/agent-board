@@ -2,7 +2,18 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Epic, Feature, Workflow } from "../../api/types";
-import { inputCls, selectCls, sectionHeadingCls, primaryBtnCls } from "./adminStyles";
+import {
+  adminItemMetaCls,
+  adminItemSubtleCls,
+  adminItemTitleCls,
+  adminListItemCls,
+  adminTagCls,
+  emptyStateCls,
+  inputCls,
+  primaryBtnCls,
+  sectionHeadingCls,
+  selectCls,
+} from "./adminStyles";
 import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 export function EpicsSection() {
@@ -92,7 +103,6 @@ export function EpicsSection() {
 
   return (
     <div className="space-y-6">
-      {/* Create form */}
       <div>
         <h3 className={sectionHeadingCls}>Create Epic</h3>
         <form onSubmit={handleCreate} className="space-y-2">
@@ -132,45 +142,38 @@ export function EpicsSection() {
         </form>
       </div>
 
-      {/* Existing epics */}
       <div>
         <h3 className={sectionHeadingCls}>Existing Epics ({epics.length})</h3>
         {epics.length === 0 ? (
-          <p className="text-[11px] font-mono text-[#334155]">No epics yet.</p>
+          <p className={emptyStateCls}>No epics yet.</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {epics.map((epic) => {
               const fCount = featureCountForEpic(epic.id);
               const cCount = cardCountForEpic(epic.id);
               const isConfirming = deletingId === epic.id;
+              const workflow = epic.workflowId
+                ? workflows.find((w) => w.id === epic.workflowId) ?? null
+                : null;
+
               return (
-                <div
-                  key={epic.id}
-                  className="bg-[#0d0d14] border border-[#1e1e2a] rounded-sm px-3 py-2 flex items-start gap-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[12px] font-mono text-[#e2e8f0]">{epic.title}</p>
-                      {epic.workflowId && (() => {
-                        const wf = workflows.find((w) => w.id === epic.workflowId);
-                        return wf ? (
-                          <span className="text-[10px] font-mono px-1 py-0.5 rounded-sm border"
-                            style={wf.type === "worktree"
-                              ? { color: "#818cf8", borderColor: "#3a3a5a", backgroundColor: "#1a1a2e" }
-                              : { color: "#475569", borderColor: "#2a2a38", backgroundColor: "#1a1a24" }}
-                          >
-                            {wf.name}
-                          </span>
-                        ) : null;
-                      })()}
+                <div key={epic.id} className={adminListItemCls}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className={adminItemTitleCls}>{epic.title}</p>
+                      {workflow && (
+                        <span className={adminTagCls(workflow.type === "worktree")}>
+                          {workflow.name}
+                        </span>
+                      )}
                     </div>
                     {epic.description && (
-                      <p className="text-[11px] font-mono text-[#475569] mt-0.5 truncate">
+                      <p className={`${adminItemMetaCls} truncate`}>
                         {epic.description}
                       </p>
                     )}
-                    <p className="text-[10px] font-mono text-[#334155] mt-0.5">
-                      {fCount} feature{fCount !== 1 ? "s" : ""} · {cCount} card{cCount !== 1 ? "s" : ""}
+                    <p className={adminItemSubtleCls}>
+                      {fCount} feature{fCount !== 1 ? "s" : ""} | {cCount} card{cCount !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <div className="shrink-0">

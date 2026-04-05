@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Card, Status } from "../../api/types";
-import { inputCls, sectionHeadingCls, cancelBtnCls, primaryBtnCls } from "./adminStyles";
+import { cancelBtnCls, inputCls, primaryBtnCls, sectionHeadingCls } from "./adminStyles";
 import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 export function StatusesSection() {
@@ -62,35 +62,34 @@ export function StatusesSection() {
         api.api.statuses({ id: swapId }).patch({ position: swapPosition }),
       ]);
     },
-    // No onSuccess invalidation — WS status:updated events handle cache refresh (debounced)
   });
 
-  const deleteStatus = async (id: string) => {
+  async function deleteStatus(id: string) {
     await api.api.statuses({ id }).delete();
     queryClient.invalidateQueries({ queryKey: ["statuses"] });
     setDeletingId(null);
-  };
+  }
 
-  const startEdit = (s: Status) => {
+  function startEdit(s: Status) {
     setEditingId(s.id);
     setEditName(s.name);
     setEditColor(s.color);
     setDeletingId(null);
-  };
+  }
 
-  const cardCount = (statusId: string) =>
-    cards.filter((c) => c.statusId === statusId).length;
-
+  const cardCount = (statusId: string) => cards.filter((c) => c.statusId === statusId).length;
   const sortedStatuses = [...statuses].sort((a, b) => a.position - b.position);
 
   return (
     <div className="space-y-6">
-      {/* Create */}
       <div>
         <h3 className={sectionHeadingCls}>New Status</h3>
         <form
-          onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMutation.mutate(); }}
-          className="flex gap-2 items-center"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (newName.trim()) createMutation.mutate();
+          }}
+          className="flex items-center gap-2"
         >
           <input
             type="text"
@@ -103,89 +102,89 @@ export function StatusesSection() {
             type="color"
             value={newColor}
             onChange={(e) => setNewColor(e.target.value)}
-            className="w-9 h-9 rounded-sm border border-[#2a2a38] bg-[#0a0a0f] cursor-pointer p-1"
+            className="h-10 w-10 cursor-pointer rounded-[14px] border border-[var(--border)] bg-[var(--panel-ink)] p-1"
             title="Pick color"
           />
-          <button
-            type="submit"
-            disabled={!newName.trim() || createMutation.isPending}
-            className={`${primaryBtnCls} shrink-0`}
-          >
+          <button type="submit" disabled={!newName.trim() || createMutation.isPending} className={`${primaryBtnCls} shrink-0`}>
             Add
           </button>
         </form>
       </div>
 
-      {/* Existing */}
       <div>
         <h3 className={sectionHeadingCls}>Existing Statuses ({sortedStatuses.length})</h3>
-        <div className="space-y-1">
+        <div className="space-y-2">
           {sortedStatuses.map((s, idx) => {
             const count = cardCount(s.id);
             const isEditing = editingId === s.id;
             const isConfirming = deletingId === s.id;
+
             return (
-              <div
-                key={s.id}
-                className="bg-[#0d0d14] border border-[#1e1e2a] rounded-sm px-3 py-2"
-                style={{ borderLeft: `3px solid ${s.color}` }}
-              >
+              <div key={s.id} className="surface-panel px-4 py-3" style={{ boxShadow: `inset 3px 0 0 ${s.color}` }}>
                 {isEditing ? (
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className={inputCls(false, "flex-1")}
-                    />
+                  <div className="flex items-center gap-2">
+                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className={inputCls(false, "flex-1")} />
                     <input
                       type="color"
                       value={editColor}
                       onChange={(e) => setEditColor(e.target.value)}
-                      className="w-8 h-8 rounded-sm border border-[#2a2a38] bg-[#0a0a0f] cursor-pointer p-1"
+                      className="h-10 w-10 cursor-pointer rounded-[14px] border border-[var(--border)] bg-[var(--panel-ink)] p-1"
                     />
-                    <button
-                      onClick={() => saveMutation.mutate(s.id)}
-                      disabled={!editName.trim() || saveMutation.isPending}
-                      className={primaryBtnCls}
-                    >
+                    <button type="button" onClick={() => saveMutation.mutate(s.id)} disabled={!editName.trim() || saveMutation.isPending} className={primaryBtnCls}>
                       Save
                     </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className={cancelBtnCls}
-                    >
+                    <button type="button" onClick={() => setEditingId(null)} className={cancelBtnCls}>
                       Cancel
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
-                    <span className="flex-1 text-[12px] font-mono text-[#e2e8f0]">{s.name}</span>
-                    <span className="text-[10px] font-mono text-[#334155]">{count} card{count !== 1 ? "s" : ""}</span>
+                    <span className="flex-1 text-[12px] font-mono text-[var(--text-primary)]">{s.name}</span>
+                    <span className="text-[10px] font-mono text-[var(--text-dim)]">{count} card{count !== 1 ? "s" : ""}</span>
                     <div className="flex items-center gap-3">
                       {!isConfirming && (
                         <>
                           <button
-                            onClick={() => reorderMutation.mutate({ id: s.id, newPosition: sortedStatuses[idx - 1].position, swapId: sortedStatuses[idx - 1].id, swapPosition: s.position })}
+                            type="button"
+                            onClick={() =>
+                              reorderMutation.mutate({
+                                id: s.id,
+                                newPosition: sortedStatuses[idx - 1].position,
+                                swapId: sortedStatuses[idx - 1].id,
+                                swapPosition: s.position,
+                              })
+                            }
                             disabled={idx === 0 || reorderMutation.isPending}
-                            className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          >↑</button>
-                          <button
-                            onClick={() => reorderMutation.mutate({ id: s.id, newPosition: sortedStatuses[idx + 1].position, swapId: sortedStatuses[idx + 1].id, swapPosition: s.position })}
-                            disabled={idx === sortedStatuses.length - 1 || reorderMutation.isPending}
-                            className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          >↓</button>
-                          <button
-                            onClick={() => startEdit(s)}
-                            className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                            className="text-[11px] font-mono text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-30"
                           >
+                            Up
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              reorderMutation.mutate({
+                                id: s.id,
+                                newPosition: sortedStatuses[idx + 1].position,
+                                swapId: sortedStatuses[idx + 1].id,
+                                swapPosition: s.position,
+                              })
+                            }
+                            disabled={idx === sortedStatuses.length - 1 || reorderMutation.isPending}
+                            className="text-[11px] font-mono text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            Down
+                          </button>
+                          <button type="button" onClick={() => startEdit(s)} className="text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
                             Edit
                           </button>
                         </>
                       )}
                       <DeleteConfirmRow
                         confirming={isConfirming}
-                        onStartConfirm={() => { setDeletingId(s.id); setEditingId(null); }}
+                        onStartConfirm={() => {
+                          setDeletingId(s.id);
+                          setEditingId(null);
+                        }}
                         onCancel={() => setDeletingId(null)}
                         onConfirm={() => deleteStatus(s.id)}
                         warningText={count > 0 ? `${count} card${count !== 1 ? "s" : ""} affected` : undefined}

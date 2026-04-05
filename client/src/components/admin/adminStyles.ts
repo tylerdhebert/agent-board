@@ -1,34 +1,55 @@
 /**
  * Shared Tailwind class helpers for admin section components.
- * Centralises the repeated class combinations so individual sections
- * stay DRY and the design stays consistent.
  */
 
-/** Monospace text input, with optional invalid (red-border) state and width override. */
 export function inputCls(invalid = false, width = "w-full"): string {
-  return `${width} bg-[#0a0a0f] border rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
+  return `${width} rounded-[16px] border px-3 py-2.5 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-faint)] bg-[var(--panel-ink)] focus:outline-none transition-colors ${
     invalid
-      ? "border-[#f87171] focus:border-[#f87171]"
-      : "border-[#2a2a38] focus:border-[#6366f1]"
+      ? "border-[var(--danger)] focus:border-[var(--danger)]"
+      : "border-[var(--border)] focus:border-[var(--accent)]"
   }`;
 }
 
-/** Full-width monospace select. */
 export const selectCls =
-  "w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] transition-colors cursor-pointer";
+  "w-full rounded-[16px] border border-[var(--border)] bg-[var(--panel-ink)] px-3 py-2.5 font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] transition-colors cursor-pointer";
 
-/** Small section heading label (e.g. "New Status", "Existing Repos (3)"). */
 export const sectionHeadingCls =
-  "text-[11px] font-mono text-[#475569] uppercase tracking-wider mb-3";
+  "text-[11px] font-mono text-[var(--text-faint)] uppercase tracking-[0.28em] mb-3";
 
-/** Ghost cancel button used next to dangerous confirmation actions. */
+export const emptyStateCls =
+  "text-[11px] font-mono text-[var(--text-dim)]";
+
 export const cancelBtnCls =
-  "text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors";
+  "text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors";
 
-/** Destructive confirm button (red, used for Delete/Confirm actions). */
 export const confirmDeleteBtnCls =
-  "px-2 py-0.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] text-[#f87171] font-mono text-[11px] rounded-sm transition-colors";
+  "px-2.5 py-1 rounded-full border border-[var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger)] hover:text-[var(--text-primary)] font-mono text-[11px] transition-colors";
 
-/** Primary action button (indigo). Disabled state included via CSS. */
 export const primaryBtnCls =
-  "px-4 py-2 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs rounded-sm transition-colors";
+  "px-4 py-2.5 rounded-full bg-[var(--accent)] hover:bg-[var(--accent-strong)] disabled:bg-[var(--panel-soft)] disabled:text-[var(--text-faint)] text-white font-mono text-xs transition-colors";
+
+export const adminListItemCls =
+  "surface-panel surface-panel--soft rounded-[18px] px-3.5 py-3 flex items-start gap-3";
+
+export const adminEditShellCls =
+  "surface-panel surface-panel--raised rounded-[18px] px-3.5 py-3.5 space-y-2";
+
+export const adminItemTitleCls =
+  "text-[12px] font-mono text-[var(--text-primary)]";
+
+export const adminItemMetaCls =
+  "mt-0.5 text-[11px] font-mono text-[var(--text-muted)]";
+
+export const adminItemSubtleCls =
+  "mt-0.5 text-[10px] font-mono text-[var(--text-dim)]";
+
+export const adminActionLinkCls =
+  "text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors";
+
+export function adminTagCls(active = false): string {
+  return `inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-mono ${
+    active
+      ? "border-[var(--accent-border)] bg-[var(--accent-surface)] text-[var(--accent-strong)]"
+      : "border-[var(--border-soft)] bg-[var(--panel-ink)] text-[var(--text-faint)]"
+  }`;
+}

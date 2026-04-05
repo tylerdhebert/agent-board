@@ -27,14 +27,14 @@ POST /cards/:id/claim
 ```
 GET /cards/:id/allowed-statuses?agentId=implementer-1
 ```
-Check before patching status — returns permitted transitions for your agent.
+Check this before patching status — returns permitted transitions for your agent.
 
 ### Update
 ```
 PATCH /cards/:id
 { "statusId": "<id>", "agentId": "implementer-1", "title": "...", "description": "...", "type": "task|story|bug", "conflictedAt": null }
 ```
-Include `agentId` when changing status so transition rules are enforced. Set `conflictedAt: null` to clear a conflict after rebasing. Do not set `completedAt` or `conflictDetails` — auto-managed.
+Always include `agentId` when changing status so transition rules are enforced. Omitting it bypasses rule checks. Set `conflictedAt: null` to clear a conflict after rebasing. Do not set `completedAt` or `conflictDetails` — auto-managed.
 
 When moving to a `triggersMerge` status, the server auto-runs `git merge-tree`; if conflicts are found, `conflictedAt` is stamped and `card:conflicted` is broadcast. No merge is performed.
 
@@ -50,7 +50,7 @@ POST /cards
 DELETE /cards/:id
 
 POST /cards/:id/recheck-conflicts          # reruns git merge-tree; returns { hasConflicts: bool }
-POST /cards/:id/comments  { "body": "...", "author": "<your-agent-id>" }
+POST /cards/:id/comments  { "body": "...", "author": "agent" }
 GET  /cards/:id/diff                       # { diff, stat, branchName }
 POST /cards/:id/merge  { "strategy": "merge|squash", "targetBranch": "feat/..." }
 ```
@@ -86,7 +86,7 @@ POST /input
 }
 ```
 
-**Blocks** until answered or timeout. Card is auto-moved to "Blocked" while pending (requires a status named exactly `"Blocked"`). Default: 900s.
+**Blocks** until answered or timeout. Card is auto-moved to "Blocked" while pending (requires a status named exactly `"Blocked"`). When the request resolves, the server restores the card's previous status if it is still in Blocked. Default: 900s.
 
 - Answer: `{ status: "answered", answers: { "q1": "yes", "q2": "production", "q3": "/api/v2/users" } }`
 - Timeout (HTTP 408): `{ status: "timed_out", answers: null }`

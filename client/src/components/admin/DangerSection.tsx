@@ -17,7 +17,7 @@ export function DangerSection() {
     staleTime: 5_000,
   });
 
-  const deleteAllCards = async () => {
+  async function deleteAllCards() {
     setIsDeleting(true);
     try {
       for (const card of cards) {
@@ -28,55 +28,49 @@ export function DangerSection() {
       setIsDeleting(false);
       setConfirmStep(0);
     }
-  };
+  }
 
   return (
     <div className="space-y-4">
-      <div className="border border-[#7f1d1d] rounded-sm p-4 bg-[#1a0a0a]">
-        <h3 className="text-[11px] font-mono text-[#f87171] uppercase tracking-wider mb-1">
-          Danger Zone
-        </h3>
-        <p className="text-[11px] font-mono text-[#64748b] mb-4">
-          These actions are irreversible.
-        </p>
+      <div className="rounded-[24px] border px-5 py-5" style={{ borderColor: "rgba(248, 113, 113, 0.36)", background: "var(--danger-soft)" }}>
+        <h3 className="mb-1 text-[11px] font-mono uppercase tracking-[0.28em] text-[var(--danger)]">Danger Zone</h3>
+        <p className="mb-4 text-[11px] font-mono text-[var(--text-muted)]">These actions are irreversible.</p>
 
-        <div className="space-y-3">
+        <div className="surface-panel surface-panel--raised px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[12px] font-mono text-[#e2e8f0]">
-                Delete ALL cards
-              </p>
-              <p className="text-[11px] font-mono text-[#64748b] mt-0.5">
-                {cards.length} card{cards.length !== 1 ? "s" : ""} will be
-                permanently deleted
+              <p className="text-[12px] font-mono text-[var(--text-primary)]">Delete all cards</p>
+              <p className="mt-0.5 text-[11px] font-mono text-[var(--text-faint)]">
+                {cards.length} card{cards.length !== 1 ? "s" : ""} will be permanently deleted
               </p>
             </div>
 
             {confirmStep === 0 && (
               <button
+                type="button"
                 onClick={() => setConfirmStep(1)}
                 disabled={cards.length === 0}
-                className="px-3 py-1.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] disabled:opacity-40 disabled:cursor-not-allowed text-[#f87171] font-mono text-[11px] rounded-sm transition-colors shrink-0"
+                className="action-button action-button--danger shrink-0"
               >
                 Delete All Cards
               </button>
             )}
 
             {confirmStep === 1 && (
-              <div className="flex flex-col items-end gap-2 shrink-0">
-                <p className="text-[11px] font-mono text-[#f87171]">
-                  Are you sure? This cannot be undone.
-                </p>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <p className="text-[11px] font-mono text-[var(--danger)]">Are you sure? This cannot be undone.</p>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() => setConfirmStep(0)}
-                    className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                    className="text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={() => setConfirmStep(2)}
-                    className="px-3 py-1.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
+                    className="action-button action-button--danger"
                   >
                     Yes, delete all
                   </button>
@@ -85,23 +79,23 @@ export function DangerSection() {
             )}
 
             {confirmStep === 2 && (
-              <div className="flex flex-col items-end gap-2 shrink-0">
-                <p className="text-[11px] font-mono text-[#f87171]">
-                  Final confirmation required.
-                </p>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <p className="text-[11px] font-mono text-[var(--danger)]">Final confirmation required.</p>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() => setConfirmStep(0)}
-                    className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                    className="text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={deleteAllCards}
                     disabled={isDeleting}
-                    className="px-3 py-1.5 bg-[#7f1d1d] border border-[#ef4444] hover:bg-[#991b1b] disabled:opacity-50 text-white font-mono text-[11px] rounded-sm transition-colors"
+                    className="action-button action-button--danger"
                   >
-                    {isDeleting ? "Deleting..." : "PERMANENTLY DELETE ALL"}
+                    {isDeleting ? "Deleting" : "Permanently Delete All"}
                   </button>
                 </div>
               </div>

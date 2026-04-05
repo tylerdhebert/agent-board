@@ -74,12 +74,12 @@ export function CardsSection() {
       {/* Delete all Done */}
       <div>
         <h3 className={sectionHeadingCls}>Bulk Actions</h3>
-        <div className="bg-[#0d0d14] border border-[#2a2a38] rounded-sm p-3 flex items-center justify-between gap-3">
+        <div className="surface-panel flex items-center justify-between gap-3 px-4 py-4">
           <div>
-            <p className="text-[12px] font-mono text-[#e2e8f0]">
+            <p className="text-[12px] font-mono text-[var(--text-primary)]">
               Delete all Done cards
             </p>
-            <p className="text-[11px] font-mono text-[#475569] mt-0.5">
+            <p className="mt-0.5 text-[11px] font-mono text-[var(--text-faint)]">
               {doneCards.length} card{doneCards.length !== 1 ? "s" : ""} will be
               deleted
             </p>
@@ -88,7 +88,7 @@ export function CardsSection() {
             <button
               onClick={() => setShowDeleteDoneConfirm(true)}
               disabled={doneCards.length === 0}
-              className="px-3 py-1.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] disabled:opacity-40 disabled:cursor-not-allowed text-[#f87171] font-mono text-[11px] rounded-sm transition-colors shrink-0"
+              className="action-button action-button--danger shrink-0"
             >
               Delete Done
             </button>
@@ -96,14 +96,14 @@ export function CardsSection() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setShowDeleteDoneConfirm(false)}
-                className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                className="text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={deleteAllDoneCards}
                 disabled={deleteAllDoneStatus === "running"}
-                className="px-3 py-1.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] disabled:opacity-50 text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
+                className="action-button action-button--danger"
               >
                 {deleteAllDoneStatus === "running"
                   ? "Deleting..."
@@ -140,12 +140,12 @@ export function CardsSection() {
           </div>
         )}
         {searchQuery.trim() && filteredCards.length === 0 && (
-          <p className="text-[11px] font-mono text-[#334155] py-2">
+          <p className="py-2 text-[11px] font-mono text-[var(--text-dim)]">
             No cards match.
           </p>
         )}
         {!searchQuery.trim() && (
-          <p className="text-[11px] font-mono text-[#334155] py-1">
+          <p className="py-1 text-[11px] font-mono text-[var(--text-dim)]">
             Type to search cards.
           </p>
         )}
@@ -171,19 +171,19 @@ function CardDeleteRow({
   const status = statuses.find((s) => s.id === card.statusId);
 
   return (
-    <div className="flex items-center gap-2 bg-[#0d0d14] border border-[#1e1e2a] rounded-sm px-3 py-2">
+    <div className="surface-panel flex items-center gap-2 px-3 py-3">
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-mono text-[#e2e8f0] truncate">
+        <p className="truncate text-[12px] font-mono text-[var(--text-primary)]">
           {card.title}
         </p>
         <div className="flex items-center gap-2 mt-0.5">
           <span
             className="text-[10px] font-mono"
-            style={{ color: status?.color ?? "#475569" }}
+            style={{ color: status?.color ?? "var(--text-faint)" }}
           >
             {status?.name ?? "Unknown"}
           </span>
-          <span className="text-[10px] font-mono text-[#334155]">
+          <span className="text-[10px] font-mono text-[var(--text-dim)]">
             {card.type}
           </span>
         </div>

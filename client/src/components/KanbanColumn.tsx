@@ -8,7 +8,6 @@ interface Props {
 }
 
 export function KanbanColumn({ workflowStatus, cards, blockedCardIds }: Props) {
-  // Build a Status-like object for CardTile (which still expects { id, name, color })
   const statusForTile = {
     id: workflowStatus.statusId,
     name: workflowStatus.name,
@@ -18,29 +17,31 @@ export function KanbanColumn({ workflowStatus, cards, blockedCardIds }: Props) {
   };
 
   return (
-    <div className="flex flex-col min-w-[260px] max-w-[300px] w-full bg-[#0d0d14] rounded-sm border border-[#1e1e2a]">
-      {/* Column header */}
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 border-b border-[#1e1e2a]"
-        style={{ borderTop: `2px solid ${workflowStatus.color}` }}
-      >
-        <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: workflowStatus.color }}
-        />
-        <span className="text-xs font-mono font-semibold text-[#cbd5e1] uppercase tracking-wider">
-          {workflowStatus.name}
-        </span>
-        <span className="ml-auto text-[10px] font-mono text-[#475569] bg-[#1a1a24] px-1.5 py-0.5 rounded">
-          {cards.length}
-        </span>
+    <div className="surface-panel flex min-w-[292px] max-w-[324px] w-full flex-col overflow-hidden">
+      <div className="border-b border-[var(--border-soft)] px-3.5 py-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor]"
+            style={{ color: workflowStatus.color, backgroundColor: workflowStatus.color }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+              Stage
+            </div>
+            <div className="mt-1 text-[15px] font-semibold text-[var(--text-primary)]">
+              {workflowStatus.name}
+            </div>
+          </div>
+          <span className="stat-pill !rounded-[10px] !px-2 !py-1 !text-[0.55rem]">
+            {cards.length}
+          </span>
+        </div>
       </div>
 
-      {/* Card list */}
-      <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2.5 py-2.5">
         {cards.length === 0 ? (
-          <div className="py-8 text-center text-[10px] font-mono text-[#334155]">
-            — empty —
+          <div className="flex flex-1 items-center justify-center rounded-[14px] border border-dashed border-[var(--border-soft)] bg-[var(--panel)] px-4 py-8 text-center text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            Empty lane
           </div>
         ) : (
           cards.map((card) => (

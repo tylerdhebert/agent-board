@@ -19,9 +19,11 @@ POST /cards     { "title": "...", "featureId": "<id>", "statusId": "<To Do id>",
 ## While working
 
 - Post a comment describing your plan **before** executing it
+- Use `POST /cards/:id/comments` with `author: "agent"`
 - Post a comment at each meaningful decision point or milestone
-- If blocked or needing a decision: `POST /input` — do not guess, do not proceed silently
-- Update card status as you progress
+- If blocked or needing a decision: `POST /input` — do not guess, do not proceed silently. The server temporarily moves the card to Blocked and restores the previous status when the request resolves if the card is still there.
+- Before changing status: `GET /cards/:id/allowed-statuses?agentId=<your-id>`
+- When changing status: include `agentId` in `PATCH /cards/:id`
 - Declare blockers: `POST /cards/:id/dependencies`
 
 ## When finished
@@ -34,6 +36,7 @@ POST /cards     { "title": "...", "featureId": "<id>", "statusId": "<To Do id>",
 
 - **Never begin work without claiming a card**
 - **Never finish without updating the card status**
+- **Never change status without including your `agentId`**
 - **Never guess at a human decision — use `POST /input`**
 - **Check messages at the start and end of every turn:** `GET /queue?agentId=<your-id>&status=pending` — always include both params; omitting `agentId` returns all agents' messages
 

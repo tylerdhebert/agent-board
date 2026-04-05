@@ -3,6 +3,25 @@ import type { InputRequest } from "../api/types";
 
 type ModalType = "card" | "input" | null;
 type WsStatus = "connecting" | "connected" | "disconnected";
+export type AppTheme = "default" | "light" | "summer" | "grass";
+
+const THEME_STORAGE_KEY = "agent-board-theme";
+
+function getInitialTheme(): AppTheme {
+  if (typeof window === "undefined") return "default";
+
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (
+    stored === "default"
+    || stored === "light"
+    || stored === "summer"
+    || stored === "grass"
+  ) {
+    return stored;
+  }
+
+  return "default";
+}
 
 export type HierarchyFilter =
   | { type: "all" }
@@ -10,6 +29,10 @@ export type HierarchyFilter =
   | { type: "feature"; id: string };
 
 interface BoardStore {
+  // Active app theme
+  theme: AppTheme;
+  setTheme: (theme: AppTheme) => void;
+
   // Selected card
   selectedCardId: string | null;
   setSelectedCardId: (id: string | null) => void;
@@ -71,6 +94,14 @@ interface BoardStore {
 }
 
 export const useBoardStore = create<BoardStore>((set) => ({
+  theme: getInitialTheme(),
+  setTheme: (theme) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    }
+    set({ theme });
+  },
+
   selectedCardId: null,
   setSelectedCardId: (id) => set({ selectedCardId: id }),
 

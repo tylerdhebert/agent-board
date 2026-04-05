@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -6,17 +7,13 @@ import { Header } from "./Header";
 import { Board } from "./Board";
 import { CardModal } from "./CardModal";
 import { InputModal } from "./InputModal";
-import { InputNotificationBanner } from "./InputNotificationBanner";
 import { HierarchySidebar } from "./HierarchySidebar";
 import { AdminPanel } from "./AdminPanel";
-import { NotificationPrompt } from "./NotificationPrompt";
-import { DailySummaryBar } from "./DailySummaryBar";
-import { ChatWidget } from "./ChatWidget";
+import { WorkbenchSidebar } from "./WorkbenchSidebar";
 import { api } from "../api/client";
 import type { Status, Epic, WorkflowStatus, InputRequest } from "../api/types";
 
 export function App() {
-  // Connect WebSocket on mount
   useWebSocket();
   useKeyboardShortcuts();
 
@@ -25,8 +22,8 @@ export function App() {
   const activeInputRequestId = useBoardStore((s) => s.activeInputRequestId);
   const adminPanelOpen = useBoardStore((s) => s.adminPanelOpen);
   const selectedEpicId = useBoardStore((s) => s.selectedEpicId);
+  const theme = useBoardStore((s) => s.theme);
 
-  // Load statuses for modals
   const { data: statuses = [] } = useQuery<Status[]>({
     queryKey: ["statuses"],
     queryFn: async () => {
@@ -36,7 +33,6 @@ export function App() {
     staleTime: 30_000,
   });
 
-  // Load epics to find the selected epic's workflowId
   const { data: epics = [] } = useQuery<Epic[]>({
     queryKey: ["epics"],
     queryFn: async () => {
@@ -50,7 +46,6 @@ export function App() {
     ? (epics.find((e) => e.id === selectedEpicId)?.workflowId ?? null)
     : null;
 
-  // Load workflow statuses for the selected epic (used in CardModal for triggersMerge)
   const { data: workflowStatuses = [] } = useQuery<WorkflowStatus[]>({
     queryKey: ["workflow-statuses", selectedEpicWorkflowId],
     queryFn: async () => {
@@ -61,13 +56,11 @@ export function App() {
     staleTime: 30_000,
   });
 
-  // Load pending input requests on startup (in case of page reload)
   useQuery<InputRequest[]>({
     queryKey: ["input", "pending"],
     queryFn: async () => {
       const { data } = await api.api.input.pending.get();
       const requests: InputRequest[] = (data as InputRequest[]) ?? [];
-      // Hydrate the store
       const store = useBoardStore.getState();
       for (const req of requests) {
         store.addPendingInputRequest(req);
@@ -84,17 +77,29 @@ export function App() {
     ? pendingInputRequests.get(activeInputRequestId)
     : null;
 
-  return (
-    <div className="h-screen flex flex-col overflow-hidden bg-[#0a0a0f]">
-      <Header />
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme =
+      theme === "light" || theme === "summer" ? "light" : "dark";
+  }, [theme]);
 
-      {/* Main content: sidebar + board */}
-      <div className="flex-1 flex min-h-0">
-        <HierarchySidebar />
-        <Board />
+  return (
+    <div className="app-root h-screen overflow-hidden">
+      <div className="app-atmosphere" aria-hidden="true" />
+      <div className="relative z-10 h-full">
+        <div className="app-shell flex h-full flex-col overflow-hidden">
+          <Header />
+
+          <div className="app-workbench">
+            <HierarchySidebar />
+            <div className="app-canvas">
+              <Board />
+            </div>
+            <WorkbenchSidebar requests={pendingList} />
+          </div>
+        </div>
       </div>
 
-      {/* Card detail modal */}
       {openModal === "card" && (
         <CardModal
           statuses={statuses}
@@ -102,25 +107,11 @@ export function App() {
         />
       )}
 
-      {/* Input answer modal */}
       {openModal === "input" && activeRequest && (
         <InputModal request={activeRequest} />
       )}
 
-      {/* Daily summary footer bar */}
-      <DailySummaryBar />
-
-      {/* Floating input notifications */}
-      <InputNotificationBanner requests={pendingList} />
-
-      {/* Admin panel */}
       {adminPanelOpen && <AdminPanel />}
-
-      {/* Notification permission prompt */}
-      <NotificationPrompt />
-
-      {/* Agent chat — fixed above daily summary bar */}
-      <ChatWidget />
     </div>
   );
 }

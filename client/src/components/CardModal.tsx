@@ -1,10 +1,11 @@
-import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { api } from "../api/client";
-import type { CardWithComments, Status, WorkflowStatus, Card, DependencyInfo } from "../api/types";
+import type { Card, CardWithComments, DependencyInfo, Status, WorkflowStatus } from "../api/types";
 import { TypeBadge } from "./TypeBadge";
+import { StatusBadge } from "./StatusBadge";
 import { DiffModal } from "./DiffModal";
 import { ConflictDetailsModal } from "./ConflictDetailsModal";
 import { formatTimestamp } from "../lib/formatUtils";
@@ -27,7 +28,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
   const [showDiff, setShowDiff] = useState(false);
   const [showConflicts, setShowConflicts] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
-  const [selectedBlockerId, setSelectedBlockerId] = useState<string>("");
+  const [selectedBlockerId, setSelectedBlockerId] = useState("");
 
   const { data: card, isLoading } = useQuery<CardWithComments>({
     queryKey: ["card", selectedCardId],
@@ -90,7 +91,6 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
     },
   });
 
-  // Dependencies
   const { data: deps } = useQuery<DependencyInfo>({
     queryKey: ["card-deps", selectedCardId],
     queryFn: async () => {
@@ -164,384 +164,368 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
 
   useEscapeToClose(handleClose);
 
-  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const newStatusId = e.target.value;
     setSelectedStatusId(newStatusId);
     updateStatusMutation.mutate(newStatusId);
-  };
+  }
 
-  const handleCommentSubmit = (e: React.FormEvent) => {
+  function handleCommentSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!commentBody.trim()) return;
     addCommentMutation.mutate(commentBody.trim());
-  };
+  }
 
   const currentStatusId = selectedStatusId ?? card?.statusId;
   const currentStatus = statuses.find((s) => s.id === currentStatusId);
   const cardStatus = statuses.find((s) => s.id === card?.statusId);
-  // Prefer triggersMerge from workflow statuses; fall back to name check
   const isReadyToMerge = workflowStatuses
     ? workflowStatuses.some((ws) => ws.statusId === card?.statusId && ws.triggersMerge)
     : cardStatus?.name.toLowerCase() === "ready to merge";
 
+  const availableBlockers = allCards.filter((c) => c.id !== selectedCardId && !deps?.blockers.some((b) => b.id === c.id));
+
   return (
     <>
-    <ModalOverlay onClose={handleClose} className="flex flex-col max-h-[90vh]">
-      <div
-        className="flex flex-col max-h-[90vh] overflow-hidden rounded-sm"
-        style={currentStatus ? { borderTop: `3px solid ${currentStatus.color}` } : {}}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between p-4 border-b border-[#1e1e2a]">
-          <div className="flex-1 min-w-0 pr-4">
-            {isLoading ? (
-              <div className="h-5 bg-[#1a1a24] rounded animate-pulse w-2/3" />
-            ) : (
-              <>
-                <div className="flex items-center gap-2 mb-1.5">
-                  {card && <TypeBadge type={card.type} />}
-                  <span className="text-[10px] font-mono text-[#475569]">
-                    {card?.id}
-                  </span>
+      <ModalOverlay onClose={handleClose} className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden">
+        <div
+          className="flex max-h-[92vh] flex-col overflow-hidden rounded-[24px]"
+          style={currentStatus ? { boxShadow: `inset 0 3px 0 ${currentStatus.color}` } : undefined}
+        >
+          <div className="border-b border-[var(--border-soft)] px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="section-kicker mb-3">
+                  <span className="section-kicker__dot" />
+                  Card Detail
                 </div>
-                <h2 className="text-sm font-semibold text-[#e2e8f0] leading-snug">
-                  {card?.title}
-                </h2>
-              </>
-            )}
-          </div>
-          <button
-            onClick={handleClose}
-            className="text-[#475569] hover:text-[#94a3b8] font-mono text-lg leading-none transition-colors shrink-0"
-          >
-            ×
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {isLoading ? (
-            <div className="space-y-2">
-              <div className="h-3 bg-[#1a1a24] rounded animate-pulse" />
-              <div className="h-3 bg-[#1a1a24] rounded animate-pulse w-4/5" />
+                {isLoading ? (
+                  <div className="space-y-3">
+                    <div className="h-4 w-24 rounded-full bg-[var(--panel-hover)] animate-pulse" />
+                    <div className="h-10 w-2/3 rounded-full bg-[var(--panel-hover)] animate-pulse" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      {card && <TypeBadge type={card.type} />}
+                      {currentStatus && <StatusBadge status={currentStatus} />}
+                      <span className="stat-pill">{card?.id}</span>
+                    </div>
+                    <h2 className="display-title text-4xl leading-none">{card?.title}</h2>
+                  </>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleClose}
+                className="action-button action-button--ghost shrink-0 !px-3 !py-2 !text-[0.62rem]"
+              >
+                Close
+              </button>
             </div>
-          ) : (
-            <>
-              {/* Meta row */}
-              <div className="grid grid-cols-2 gap-3 text-[11px]">
-                <div>
-                  <span className="text-[#475569] font-mono uppercase tracking-wider block mb-1">
-                    Status
-                  </span>
-                  <select
-                    value={currentStatusId ?? ""}
-                    onChange={handleStatusChange}
-                    className="w-full bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-2 py-1 font-mono text-[11px] text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] cursor-pointer"
-                  >
-                    {statuses.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            {isLoading ? (
+              <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
+                <div className="space-y-4">
+                  <div className="surface-panel h-40 animate-pulse" />
+                  <div className="surface-panel h-48 animate-pulse" />
                 </div>
-                <div>
-                  <span className="text-[#475569] font-mono uppercase tracking-wider block mb-1">
-                    Agent
-                  </span>
-                  <span className="font-mono text-[#94a3b8]">
-                    {card?.agentId ?? "—"}
-                  </span>
-                </div>
-                {card?.branchName && (
-                  <div className="col-span-2">
-                    <span className="text-[#475569] font-mono uppercase tracking-wider block mb-1">
-                      Branch
-                    </span>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#818cf8] bg-[#1a1a2e] px-2 py-0.5 rounded-sm border border-[#2a2a4a]">
-                        ⎇ {card.branchName}
-                      </span>
-                      <button
-                        onClick={() => setShowDiff(true)}
-                        className="px-2 py-0.5 bg-[#1a1a2e] border border-[#2a2a4a] hover:border-[#818cf8] text-[#818cf8] font-mono text-[11px] rounded-sm transition-colors"
-                      >
-                        View Diff
-                      </button>
-                      {isReadyToMerge && (
-                        <button
-                          onClick={() => {
-                            setMergeError(null);
-                            mergeMutation.mutate();
-                          }}
-                          disabled={mergeMutation.isPending}
-                          className="px-2 py-0.5 bg-[#1a2e1a] border border-[#2a4a2a] hover:border-[#4ade80] disabled:opacity-50 text-[#4ade80] font-mono text-[11px] rounded-sm transition-colors"
-                        >
-                          {mergeMutation.isPending ? "Merging..." : "Merge"}
-                        </button>
+                <div className="surface-panel h-72 animate-pulse" />
+              </div>
+            ) : (
+              <div className="grid gap-5 xl:grid-cols-[1.35fr_0.9fr]">
+                <div className="space-y-5">
+                  {card?.description && (
+                    <SectionCard title="Description">
+                      <p className="text-sm leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">
+                        {card.description}
+                      </p>
+                    </SectionCard>
+                  )}
+
+                  <SectionCard title={`Blockers (${deps?.blockers.length ?? 0})`}>
+                    <div className="space-y-2">
+                      {deps?.blockers.length ? (
+                        deps.blockers.map((blocker) => {
+                          const isDone = blocker.statusName.toLowerCase() === "done";
+                          return (
+                            <div
+                              key={blocker.id}
+                              className="flex items-center gap-3 rounded-[18px] border border-[var(--border-soft)] bg-[var(--panel-ink)] px-3 py-3"
+                            >
+                              <span
+                                className={`h-2.5 w-2.5 shrink-0 rounded-full ${isDone ? "bg-[var(--success)]" : "bg-[var(--danger)]"}`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className={`truncate text-[12px] font-semibold ${isDone ? "line-through text-[var(--text-faint)]" : "text-[var(--text-primary)]"}`}>
+                                  {blocker.title}
+                                </p>
+                                <p className="mt-1 text-[10px] font-mono text-[var(--text-faint)]">{blocker.statusName}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeBlockerMutation.mutate(blocker.id)}
+                                disabled={removeBlockerMutation.isPending}
+                                className="action-button action-button--ghost shrink-0 !px-2.5 !py-1.5 !text-[0.56rem]"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-[11px] font-mono text-[var(--text-dim)]">No blockers are currently attached.</p>
                       )}
                     </div>
-                    {mergeError && (
-                      <p className="mt-1.5 text-[11px] font-mono text-[#f87171] leading-relaxed">
-                        {mergeError}
-                      </p>
-                    )}
-                  </div>
-                )}
-                <div>
-                  <span className="text-[#475569] font-mono uppercase tracking-wider block mb-1">
-                    Created
-                  </span>
-                  <span className="font-mono text-[#94a3b8]">
-                    {card ? formatTimestamp(card.createdAt) : "—"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[#475569] font-mono uppercase tracking-wider block mb-1">
-                    Updated
-                  </span>
-                  <span className="font-mono text-[#94a3b8]">
-                    {card ? formatTimestamp(card.updatedAt) : "—"}
-                  </span>
-                </div>
-              </div>
 
-              {/* Conflict banner */}
-              {card?.conflictedAt && (
-                <div className="rounded-sm border border-[#7f3500] bg-[#1f0d00] p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[#f59e0b] font-mono text-[10px] font-bold uppercase tracking-wider">
-                      &#9888; Merge conflict detected
-                    </span>
-                    <span className="text-[#64748b] font-mono text-[10px] ml-auto shrink-0">
-                      {formatTimestamp(card.conflictedAt)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      onClick={() => setShowConflicts(true)}
-                      className="px-2 py-0.5 bg-[#2d1500] border border-[#7f3500] hover:border-[#f59e0b] text-[#f59e0b] font-mono text-[11px] rounded-sm transition-colors"
-                    >
-                      View Conflicts
-                    </button>
-                    <button
-                      onClick={() => recheckConflictMutation.mutate()}
-                      disabled={recheckConflictMutation.isPending}
-                      className="px-2 py-0.5 bg-[#0d1014] border border-[#1e3a2a] hover:border-[#22c55e] disabled:opacity-50 text-[#22c55e] font-mono text-[11px] rounded-sm transition-colors"
-                    >
-                      {recheckConflictMutation.isPending ? "Checking..." : "Re-check"}
-                    </button>
-                    <button
-                      onClick={() => clearConflictMutation.mutate()}
-                      disabled={clearConflictMutation.isPending}
-                      className="px-2 py-0.5 bg-[#0d0d14] border border-[#2a2a38] hover:border-[#475569] disabled:opacity-50 text-[#64748b] font-mono text-[11px] rounded-sm transition-colors"
-                    >
-                      {clearConflictMutation.isPending ? "Clearing..." : "Clear conflict"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Description */}
-              {card?.description && (
-                <div>
-                  <span className="text-[#475569] font-mono uppercase tracking-wider text-[10px] block mb-1.5">
-                    Description
-                  </span>
-                  <p className="text-[#94a3b8] text-xs leading-relaxed whitespace-pre-wrap">
-                    {card.description}
-                  </p>
-                </div>
-              )}
-
-              {/* Blockers */}
-              <div>
-                <span className="text-[#475569] font-mono uppercase tracking-wider text-[10px] block mb-2">
-                  Blockers ({deps?.blockers.length ?? 0})
-                </span>
-                <div className="space-y-1 mb-2">
-                  {deps?.blockers.map((blocker) => {
-                    const isDone = blocker.statusName.toLowerCase() === "done";
-                    return (
-                      <div
-                        key={blocker.id}
-                        className="flex items-center gap-2 px-2 py-1.5 bg-[#0d0d14] border border-[#1e1e2a] rounded-sm"
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <select
+                        value={selectedBlockerId}
+                        onChange={(e) => setSelectedBlockerId(e.target.value)}
+                        className="field-shell flex-1 cursor-pointer px-3 py-3 text-xs"
                       >
-                        {!isDone && (
-                          <span className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0" />
-                        )}
-                        <span
-                          className={`flex-1 font-mono text-[11px] truncate ${
-                            isDone ? "line-through text-[#475569]" : "text-[#cbd5e1]"
-                          }`}
+                        <option value="">Add a blocker...</option>
+                        {availableBlockers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.title}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedBlockerId) addBlockerMutation.mutate(selectedBlockerId);
+                        }}
+                        disabled={!selectedBlockerId || addBlockerMutation.isPending}
+                        className="action-button action-button--muted shrink-0"
+                      >
+                        {addBlockerMutation.isPending ? "Adding" : "Add"}
+                      </button>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard title={`Comments (${card?.comments.length ?? 0})`}>
+                    <div className="space-y-3">
+                      {card?.comments.length ? (
+                        card.comments.map((comment) => {
+                          const isAgent = comment.author === "agent";
+                          return (
+                            <div
+                              key={comment.id}
+                              className="rounded-[20px] border px-4 py-3"
+                              style={{
+                                borderColor: isAgent ? "var(--accent-border)" : "rgba(74, 222, 128, 0.3)",
+                                background: isAgent ? "var(--accent-surface)" : "var(--success-soft)",
+                              }}
+                            >
+                              <div className="mb-2 flex flex-wrap items-center gap-2">
+                                <span className="meta-label" style={{ color: isAgent ? "var(--accent-strong)" : "var(--success)" }}>
+                                  {isAgent ? "Agent" : "User"}
+                                </span>
+                                <span className="text-[10px] font-mono text-[var(--text-faint)]">
+                                  {formatTimestamp(comment.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-sm leading-relaxed text-[var(--text-primary)] whitespace-pre-wrap">
+                                {comment.body}
+                              </p>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-[11px] font-mono text-[var(--text-dim)]">No comments yet.</p>
+                      )}
+                    </div>
+
+                    <form onSubmit={handleCommentSubmit} className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={commentBody}
+                        onChange={(e) => setCommentBody(e.target.value)}
+                        placeholder="Add a comment..."
+                        className="field-shell flex-1 px-3 py-3 text-xs"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!commentBody.trim() || addCommentMutation.isPending}
+                        className="action-button action-button--accent shrink-0"
+                      >
+                        {addCommentMutation.isPending ? "Sending" : "Send"}
+                      </button>
+                    </form>
+                  </SectionCard>
+                </div>
+
+                <div className="space-y-5">
+                  <SectionCard title="Overview">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                      <div>
+                        <div className="meta-label mb-2">Status</div>
+                        <select
+                          value={currentStatusId ?? ""}
+                          onChange={handleStatusChange}
+                          className="field-shell w-full cursor-pointer px-3 py-3 text-xs"
                         >
-                          {blocker.title}
-                        </span>
-                        <span className="text-[10px] font-mono text-[#64748b] shrink-0">
-                          {blocker.statusName}
-                        </span>
+                          {statuses.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <MetaItem label="Agent" value={card?.agentId ?? "Unassigned"} />
+                      <MetaItem label="Created" value={card ? formatTimestamp(card.createdAt) : "-"} />
+                      <MetaItem label="Updated" value={card ? formatTimestamp(card.updatedAt) : "-"} />
+                    </div>
+                  </SectionCard>
+
+                  {card?.branchName && (
+                    <SectionCard title="Branch">
+                      <div className="mb-3 rounded-[18px] border border-[var(--accent-border)] bg-[var(--accent-surface)] px-4 py-3">
+                        <p className="text-[13px] font-semibold text-[var(--accent-strong)]">{card.branchName}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
                         <button
-                          onClick={() => removeBlockerMutation.mutate(blocker.id)}
-                          disabled={removeBlockerMutation.isPending}
-                          className="text-[#475569] hover:text-[#f87171] font-mono text-sm leading-none transition-colors shrink-0"
+                          type="button"
+                          onClick={() => setShowDiff(true)}
+                          className="action-button action-button--muted"
                         >
-                          ×
+                          View Diff
                         </button>
+                        {isReadyToMerge && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMergeError(null);
+                              mergeMutation.mutate();
+                            }}
+                            disabled={mergeMutation.isPending}
+                            className="action-button action-button--success"
+                          >
+                            {mergeMutation.isPending ? "Merging" : "Merge"}
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
-                  {deps?.blockers.length === 0 && (
-                    <div className="text-[11px] font-mono text-[#334155] py-1">
-                      No blockers.
-                    </div>
+                      {mergeError && <p className="mt-3 text-[11px] font-mono text-[var(--danger)]">{mergeError}</p>}
+                    </SectionCard>
                   )}
-                </div>
-                {/* Add blocker row */}
-                <div className="flex gap-2">
-                  <select
-                    value={selectedBlockerId}
-                    onChange={(e) => setSelectedBlockerId(e.target.value)}
-                    className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-2 py-1 font-mono text-[11px] text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] cursor-pointer"
-                  >
-                    <option value="">Add blocker...</option>
-                    {allCards
-                      .filter(
-                        (c) =>
-                          c.id !== selectedCardId &&
-                          !deps?.blockers.some((b) => b.id === c.id)
-                      )
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.title}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    onClick={() => {
-                      if (selectedBlockerId) addBlockerMutation.mutate(selectedBlockerId);
-                    }}
-                    disabled={!selectedBlockerId || addBlockerMutation.isPending}
-                    className="px-3 py-1 bg-[#1e1e2a] hover:bg-[#2a2a38] disabled:opacity-50 text-[#94a3b8] font-mono text-[11px] rounded-sm transition-colors shrink-0"
-                  >
-                    {addBlockerMutation.isPending ? "..." : "Add"}
-                  </button>
+
+                  {card?.conflictedAt && (
+                    <SectionCard title="Conflict State">
+                      <div
+                        className="rounded-[18px] border bg-[var(--warning-soft)] px-4 py-4"
+                        style={{ borderColor: "rgba(245, 158, 11, 0.4)" }}
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <span className="meta-label" style={{ color: "var(--warning)" }}>
+                            Merge Conflict
+                          </span>
+                          <span className="text-[10px] font-mono text-[var(--text-faint)]">
+                            {formatTimestamp(card.conflictedAt)}
+                          </span>
+                        </div>
+                        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                          This card has recorded conflict details and needs review before merging.
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowConflicts(true)}
+                            className="action-button action-button--warning"
+                          >
+                            View Conflicts
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => recheckConflictMutation.mutate()}
+                            disabled={recheckConflictMutation.isPending}
+                            className="action-button action-button--success"
+                          >
+                            {recheckConflictMutation.isPending ? "Checking" : "Re-check"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => clearConflictMutation.mutate()}
+                            disabled={clearConflictMutation.isPending}
+                            className="action-button action-button--ghost"
+                          >
+                            {clearConflictMutation.isPending ? "Clearing" : "Clear"}
+                          </button>
+                        </div>
+                      </div>
+                    </SectionCard>
+                  )}
+
+                  <SectionCard title="Danger Zone">
+                    {!showDeleteConfirm ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="action-button action-button--danger"
+                      >
+                        Delete Card
+                      </button>
+                    ) : (
+                      <div
+                        className="rounded-[18px] border bg-[var(--danger-soft)] px-4 py-4"
+                        style={{ borderColor: "rgba(248, 113, 113, 0.35)" }}
+                      >
+                        <p className="text-sm text-[var(--text-primary)]">Delete this card permanently?</p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="action-button action-button--ghost"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteCardMutation.mutate()}
+                            disabled={deleteCardMutation.isPending}
+                            className="action-button action-button--danger"
+                          >
+                            {deleteCardMutation.isPending ? "Deleting" : "Confirm Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </SectionCard>
                 </div>
               </div>
-
-              {/* Comments */}
-              <div>
-                <span className="text-[#475569] font-mono uppercase tracking-wider text-[10px] block mb-2">
-                  Comments ({card?.comments.length ?? 0})
-                </span>
-                <div className="space-y-2">
-                  {card?.comments.map((comment) => (
-                    <div
-                      key={comment.id}
-                      className={`rounded-sm p-2.5 border-l-2 ${
-                        comment.author === "agent"
-                          ? "bg-[#0d0d14] border-[#6366f1]"
-                          : "bg-[#0d1117] border-[#22c55e]"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`text-[10px] font-mono font-bold uppercase ${
-                            comment.author === "agent"
-                              ? "text-[#818cf8]"
-                              : "text-[#4ade80]"
-                          }`}
-                        >
-                          {comment.author === "agent" ? "AGENT" : "USER"}
-                        </span>
-                        <span className="text-[10px] font-mono text-[#475569]">
-                          {formatTimestamp(comment.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#cbd5e1] leading-relaxed whitespace-pre-wrap">
-                        {comment.body}
-                      </p>
-                    </div>
-                  ))}
-                  {card?.comments.length === 0 && (
-                    <div className="text-[11px] font-mono text-[#334155] py-2">
-                      No comments yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
+            )}
+          </div>
         </div>
+      </ModalOverlay>
 
-        {/* Comment input */}
-        <div className="p-4 border-t border-[#1e1e2a]">
-          <form onSubmit={handleCommentSubmit} className="flex gap-2">
-            <input
-              type="text"
-              value={commentBody}
-              onChange={(e) => setCommentBody(e.target.value)}
-              placeholder="Add a comment..."
-              className="flex-1 bg-[#0a0a0f] border border-[#2a2a38] rounded-sm px-3 py-2 font-mono text-xs text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#6366f1] transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={!commentBody.trim() || addCommentMutation.isPending}
-              className="px-3 py-2 bg-[#6366f1] hover:bg-[#818cf8] disabled:bg-[#1e1e2a] disabled:text-[#475569] text-white font-mono text-xs rounded-sm transition-colors"
-            >
-              {addCommentMutation.isPending ? "..." : "Send"}
-            </button>
-          </form>
-        </div>
+      {showDiff && card?.branchName && (
+        <DiffModal cardId={card.id} cardTitle={card.title} branchName={card.branchName} onClose={() => setShowDiff(false)} />
+      )}
 
-        {/* Delete card section */}
-        <div className="px-4 pb-4 border-t border-[#1e1e2a] pt-3">
-          {!showDeleteConfirm ? (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-[11px] font-mono text-[#64748b] hover:text-[#f87171] transition-colors"
-            >
-              Delete card
-            </button>
-          ) : (
-            <div className="flex items-center gap-3">
-              <span className="text-[11px] font-mono text-[#f87171]">
-                Are you sure?
-              </span>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteCardMutation.mutate()}
-                disabled={deleteCardMutation.isPending}
-                className="px-2.5 py-1 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] disabled:opacity-50 text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
-              >
-                {deleteCardMutation.isPending ? "Deleting..." : "Confirm Delete"}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </ModalOverlay>
-
-    {showDiff && card?.branchName && (
-      <DiffModal
-        cardId={card.id}
-        cardTitle={card.title}
-        branchName={card.branchName}
-        onClose={() => setShowDiff(false)}
-      />
-    )}
-
-    {showConflicts && card?.conflictedAt && (
-      <ConflictDetailsModal
-        card={card}
-        onClose={() => setShowConflicts(false)}
-      />
-    )}
+      {showConflicts && card?.conflictedAt && <ConflictDetailsModal card={card} onClose={() => setShowConflicts(false)} />}
     </>
   );
 }
 
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="surface-panel px-4 py-4">
+      <div className="meta-label mb-3">{title}</div>
+      {children}
+    </section>
+  );
+}
+
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[18px] border border-[var(--border-soft)] bg-[var(--panel-ink)] px-4 py-3">
+      <div className="meta-label mb-2">{label}</div>
+      <div className="text-sm text-[var(--text-secondary)] break-words">{value}</div>
+    </div>
+  );
+}

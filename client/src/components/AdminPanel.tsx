@@ -13,7 +13,17 @@ import { ShortcutsSection } from "./admin/ShortcutsSection";
 import { ReposSection } from "./admin/ReposSection";
 import { WorkflowsSection } from "./admin/WorkflowsSection";
 
-type Section = "cards" | "move" | "statuses" | "epics" | "features" | "rules" | "shortcuts" | "repos" | "workflows" | "danger";
+type Section =
+  | "cards"
+  | "move"
+  | "statuses"
+  | "epics"
+  | "features"
+  | "rules"
+  | "shortcuts"
+  | "repos"
+  | "workflows"
+  | "danger";
 
 export function AdminPanel() {
   const setAdminPanelOpen = useBoardStore((s) => s.setAdminPanelOpen);
@@ -21,69 +31,81 @@ export function AdminPanel() {
 
   useEscapeToClose(useCallback(() => setAdminPanelOpen(false), [setAdminPanelOpen]));
 
-  return (
-    <ModalOverlay onClose={() => setAdminPanelOpen(false)} className="flex flex-col h-[50vh] max-w-[820px]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e2a] shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-[#6366f1]">⚙</span>
-            <span className="text-sm font-mono font-semibold text-[#e2e8f0]">Admin Panel</span>
-          </div>
-          <button
-            onClick={() => setAdminPanelOpen(false)}
-            className="text-[#475569] hover:text-[#94a3b8] font-mono text-lg leading-none transition-colors"
-          >
-            ×
-          </button>
-        </div>
+  const sections: Section[] = [
+    "statuses",
+    "workflows",
+    "repos",
+    "epics",
+    "features",
+    "cards",
+    "move",
+    "rules",
+    "shortcuts",
+  ];
 
-        {/* Body: sidenav + content */}
-        <div className="flex flex-1 min-h-0">
-          {/* Sidenav */}
-          <nav className="w-36 shrink-0 border-r border-[#1e1e2a] flex flex-col py-2 overflow-y-auto">
-            <div className="flex-1 flex flex-col">
-              {(["statuses", "workflows", "repos", "epics", "features", "cards", "move", "rules", "shortcuts"] as Section[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setActiveSection(s)}
-                  className={`text-left px-4 py-2 text-[13px] font-mono uppercase tracking-wider transition-colors ${
-                    activeSection === s
-                      ? "text-[#818cf8] bg-[#1e1e2a] border-l-2 border-[#6366f1]"
-                      : "text-[#475569] hover:text-[#94a3b8] hover:bg-[#16161f] border-l-2 border-transparent"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <div className="border-t border-[#1e1e2a] pt-2">
+  return (
+    <ModalOverlay onClose={() => setAdminPanelOpen(false)} className="flex flex-col h-[78vh] max-w-[1100px]">
+      <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4 shrink-0">
+        <div>
+          <div className="section-kicker mb-2">
+            <span className="section-kicker__dot" />
+            Control Room
+          </div>
+          <h2 className="display-title text-3xl leading-none">Admin Panel</h2>
+        </div>
+        <button
+          onClick={() => setAdminPanelOpen(false)}
+          className="chrome-button !px-3 !py-2 !text-[0.68rem]"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="flex flex-1 min-h-0">
+        <nav className="w-52 shrink-0 border-r border-[var(--border-soft)] bg-[var(--panel-soft)] p-3 overflow-y-auto">
+          <div className="space-y-1">
+            {sections.map((section) => (
               <button
-                onClick={() => setActiveSection("danger")}
-                className={`w-full text-left px-4 py-2 text-[13px] font-mono uppercase tracking-wider transition-colors ${
-                  activeSection === "danger"
-                    ? "text-[#f87171] bg-[#1e1e2a] border-l-2 border-[#f87171]"
-                    : "text-[#475569] hover:text-[#f87171] hover:bg-[#16161f] border-l-2 border-transparent"
+                key={section}
+                onClick={() => setActiveSection(section)}
+                className={`w-full rounded-[18px] px-4 py-3 text-left text-[12px] font-semibold uppercase tracking-[0.2em] transition-all ${
+                  activeSection === section
+                    ? "border border-[var(--accent-border)] bg-[var(--accent-surface)] text-[var(--text-primary)]"
+                    : "border border-transparent text-[var(--text-muted)] hover:border-[var(--border-soft)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                danger
+                {section}
               </button>
-            </div>
-          </nav>
-
-          {/* Section body */}
-          <div className="flex-1 overflow-y-auto p-4 min-w-0">
-            {activeSection === "cards" && <CardsSection />}
-            {activeSection === "move" && <MoveSection />}
-            {activeSection === "statuses" && <StatusesSection />}
-            {activeSection === "epics" && <EpicsSection />}
-            {activeSection === "features" && <FeaturesSection />}
-            {activeSection === "rules" && <RulesSection />}
-            {activeSection === "shortcuts" && <ShortcutsSection />}
-            {activeSection === "repos" && <ReposSection />}
-            {activeSection === "workflows" && <WorkflowsSection />}
-            {activeSection === "danger" && <DangerSection />}
+            ))}
           </div>
+
+          <div className="mt-4 border-t border-[var(--border-soft)] pt-4">
+            <button
+              onClick={() => setActiveSection("danger")}
+              className={`w-full rounded-[18px] px-4 py-3 text-left text-[12px] font-semibold uppercase tracking-[0.2em] transition-all ${
+                activeSection === "danger"
+                  ? "border border-red-400/40 bg-red-500/10 text-red-200"
+                  : "border border-transparent text-[var(--text-muted)] hover:border-red-400/30 hover:bg-red-500/8 hover:text-red-200"
+              }`}
+            >
+              danger
+            </button>
+          </div>
+        </nav>
+
+        <div className="flex-1 overflow-y-auto p-5 min-w-0 bg-[var(--panel)]">
+          {activeSection === "cards" && <CardsSection />}
+          {activeSection === "move" && <MoveSection />}
+          {activeSection === "statuses" && <StatusesSection />}
+          {activeSection === "epics" && <EpicsSection />}
+          {activeSection === "features" && <FeaturesSection />}
+          {activeSection === "rules" && <RulesSection />}
+          {activeSection === "shortcuts" && <ShortcutsSection />}
+          {activeSection === "repos" && <ReposSection />}
+          {activeSection === "workflows" && <WorkflowsSection />}
+          {activeSection === "danger" && <DangerSection />}
         </div>
+      </div>
     </ModalOverlay>
   );
 }

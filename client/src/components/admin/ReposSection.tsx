@@ -3,7 +3,19 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Repo } from "../../api/types";
 import { PathPicker } from "../PathPicker";
-import { inputCls, sectionHeadingCls, cancelBtnCls, primaryBtnCls } from "./adminStyles";
+import {
+  adminActionLinkCls,
+  adminEditShellCls,
+  adminItemMetaCls,
+  adminItemSubtleCls,
+  adminItemTitleCls,
+  adminListItemCls,
+  emptyStateCls,
+  inputCls,
+  sectionHeadingCls,
+  cancelBtnCls,
+  primaryBtnCls,
+} from "./adminStyles";
 import { DeleteConfirmRow } from "../ui/DeleteConfirmRow";
 
 interface EditState {
@@ -23,7 +35,13 @@ export function ReposSection() {
   const [buildCommand, setBuildCommand] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editState, setEditState] = useState<EditState>({ name: "", path: "", baseBranch: "", compareBase: "", buildCommand: "" });
+  const [editState, setEditState] = useState<EditState>({
+    name: "",
+    path: "",
+    baseBranch: "",
+    compareBase: "",
+    buildCommand: "",
+  });
   const [createAttempted, setCreateAttempted] = useState(false);
   const [editAttempted, setEditAttempted] = useState(false);
 
@@ -112,7 +130,6 @@ export function ReposSection() {
 
   return (
     <div className="space-y-6">
-      {/* Create form */}
       <div>
         <h3 className={sectionHeadingCls}>Add Repo</h3>
         <form onSubmit={handleCreate} className="space-y-2">
@@ -164,23 +181,19 @@ export function ReposSection() {
         </form>
       </div>
 
-      {/* Existing repos */}
       <div>
         <h3 className={sectionHeadingCls}>Repos ({repos.length})</h3>
         {repos.length === 0 ? (
-          <p className="text-[11px] font-mono text-[#334155]">No repos configured yet.</p>
+          <p className={emptyStateCls}>No repos configured yet.</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {repos.map((repo) => {
               const isConfirming = deletingId === repo.id;
               const isEditing = editingId === repo.id;
 
               if (isEditing) {
                 return (
-                  <div
-                    key={repo.id}
-                    className="bg-[#0d0d14] border border-[#2a2a4a] rounded-sm px-3 py-3 space-y-2"
-                  >
+                  <div key={repo.id} className={adminEditShellCls}>
                     <input
                       type="text"
                       value={editState.name}
@@ -219,7 +232,10 @@ export function ReposSection() {
                     />
                     <div className="flex justify-end gap-2">
                       <button
-                        onClick={() => { setEditingId(null); setEditAttempted(false); }}
+                        onClick={() => {
+                          setEditingId(null);
+                          setEditAttempted(false);
+                        }}
                         className={cancelBtnCls}
                       >
                         Cancel
@@ -237,26 +253,21 @@ export function ReposSection() {
               }
 
               return (
-                <div
-                  key={repo.id}
-                  className="bg-[#0d0d14] border border-[#1e1e2a] rounded-sm px-3 py-2 flex items-start gap-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-mono text-[#e2e8f0]">{repo.name}</p>
-                    <p className="text-[11px] font-mono text-[#475569] mt-0.5 truncate">
-                      {repo.path}
-                    </p>
-                    <p className="text-[10px] font-mono text-[#334155] mt-0.5">
+                <div key={repo.id} className={adminListItemCls}>
+                  <div className="min-w-0 flex-1">
+                    <p className={adminItemTitleCls}>{repo.name}</p>
+                    <p className={`${adminItemMetaCls} truncate`}>{repo.path}</p>
+                    <p className={adminItemSubtleCls}>
                       branch: {repo.baseBranch}
-                      {repo.compareBase && <span className="ml-2 text-[#475569]">← {repo.compareBase}</span>}
-                      {repo.buildCommand && <span className="ml-2 text-[#475569]">build: {repo.buildCommand}</span>}
+                      {repo.compareBase ? ` | compare ${repo.compareBase}` : ""}
+                      {repo.buildCommand ? ` | build ${repo.buildCommand}` : ""}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     {!isConfirming && (
                       <button
                         onClick={() => startEdit(repo)}
-                        className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+                        className={adminActionLinkCls}
                       >
                         Edit
                       </button>

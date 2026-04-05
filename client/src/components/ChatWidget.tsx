@@ -1,26 +1,20 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { QueueMessage, Conversation, Card } from "../api/types";
+import type { Card, Conversation, QueueMessage } from "../api/types";
 import { useBoardStore } from "../store";
 import { useShortcutHint } from "../hooks/useShortcutHint";
 import { ShortcutBadge } from "./ShortcutBadge";
 import { useEscapeToClose } from "../hooks/useEscapeStack";
 import { formatTimestamp } from "../lib/formatUtils";
 
-// ---------------------------------------------------------------------------
-// Thread window — one per open conversation
-// ---------------------------------------------------------------------------
-
 interface ThreadWindowProps {
   agentId: string;
-  leftOffset: number;
-  bottomOffset: number;
   unread: number;
   onClose: () => void;
 }
 
-function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }: ThreadWindowProps) {
+function ChatThreadWindow({ agentId, unread, onClose }: ThreadWindowProps) {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [collapsed, setCollapsed] = useState(false);
@@ -28,10 +22,13 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
 
   useEscapeToClose(onClose);
 
-  // Fires every time the scroll container mounts (open, uncollapse, reopen)
   const scrollRefCallback = useCallback((el: HTMLDivElement | null) => {
     scrollRef.current = el;
-    if (el) setTimeout(() => { el.scrollTop = el.scrollHeight; }, 0);
+    if (el) {
+      setTimeout(() => {
+        el.scrollTop = el.scrollHeight;
+      }, 0);
+    }
   }, []);
 
   const textareaRefCallback = useCallback((el: HTMLTextAreaElement | null) => {
@@ -62,17 +59,16 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
     const { data } = await api.api.queue.get({ query: { agentId, status: "pending" } });
     const pending: QueueMessage[] = data ?? [];
     await Promise.all(
-      pending.filter(m => m.author !== "user").map(m =>
-        (api.api.queue({ id: m.id }) as any).read.post({})
-      )
+      pending.filter((m) => m.author !== "user").map((m) => (api.api.queue({ id: m.id }) as any).read.post({}))
     );
-    if (pending.some(m => m.author !== "user")) {
+    if (pending.some((m) => m.author !== "user")) {
       queryClient.invalidateQueries({ queryKey: ["queue"] });
     }
   }, [agentId, unread, queryClient]);
 
-  // Mark as read when window is first opened
-  useEffect(() => { markRead(); }, [agentId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    markRead();
+  }, [agentId, markRead]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -81,58 +77,79 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
 
   return (
     <div
-      className="fixed z-40 w-[320px] flex flex-col border border-b-0 border-[#2a2a38] rounded-t-lg overflow-hidden shadow-2xl"
-      style={{ bottom: bottomOffset, left: leftOffset, height: collapsed ? "auto" : 380, background: "#1c1c28" }}
+      className={`surface-panel surface-panel--raised flex w-[336px] max-w-[calc(100vw-2rem)] shrink-0 flex-col overflow-hidden rounded-b-none border-b-0 shadow-2xl ${
+        unread > 0 ? "chat-bar-glow" : ""
+      }`}
+      style={{ height: collapsed ? "auto" : 400 }}
       onClick={markRead}
     >
-      {/* Header — click to collapse/expand, ✕ to close */}
       <div
-        className={`flex items-center justify-between px-3 py-2.5 border-b border-[#2a2a38] shrink-0 cursor-pointer select-none hover:bg-[#22222e] transition-colors ${
-          unread > 0 ? "chat-bar-glow" : ""
-        }`}
+        className="flex cursor-pointer items-center justify-between border-b border-[var(--border-soft)] px-4 py-3 transition-colors hover:bg-[var(--accent-surface)]"
         onClick={() => setCollapsed((v) => !v)}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[11px] font-mono text-[#e2e8f0] truncate">{agentId}</span>
-          {unread > 0 && (
-            <span className="w-4 h-4 rounded-full bg-[#6366f1] text-white text-[9px] font-bold flex items-center justify-center shrink-0">
-              {unread}
-            </span>
-          )}
+        <div className="min-w-0">
+          <div className="meta-label mb-1">Active Thread</div>
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{agentId}</p>
+            {unread > 0 && <UnreadBadge count={unread} />}
+          </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0 ml-2">
-          <span className="text-[10px] font-mono text-[#334155]">{collapsed ? "▲" : "▼"}</span>
+
+        <div className="flex items-center gap-2">
           <button
-            className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8]"
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCollapsed((v) => !v);
+            }}
+            className="action-button action-button--ghost !px-2.5 !py-1.5 !text-[0.58rem]"
           >
-            ✕
+            {collapsed ? "Open" : "Hide"}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="action-button action-button--ghost !px-2.5 !py-1.5 !text-[0.58rem]"
+          >
+            Close
           </button>
         </div>
       </div>
 
-      {/* Messages + Compose — hidden when collapsed */}
       {!collapsed && (
         <>
-          <div ref={scrollRefCallback} className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+          <div ref={scrollRefCallback} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {messages.length === 0 && (
-              <p className="text-[#475569] text-[11px] font-mono text-center mt-6">No messages yet.</p>
+              <div className="surface-panel bg-transparent px-4 py-5 text-center">
+                <div className="meta-label mb-2">Conversation</div>
+                <p className="text-[11px] font-mono text-[var(--text-dim)]">No messages yet.</p>
+              </div>
             )}
+
             {messages.map((msg) => {
               const isUser = msg.author === "user";
               return (
                 <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-[12px] font-mono ${
-                      isUser ? "rounded-br-sm text-white" : "rounded-bl-sm text-[#e2e8f0]"
+                    className={`max-w-[82%] rounded-[20px] px-3 py-2.5 text-[12px] font-mono shadow-[0_10px_24px_var(--shadow-color)] ${
+                      isUser ? "rounded-br-md text-white" : "rounded-bl-md text-[var(--text-primary)]"
                     }`}
-                    style={{ background: isUser ? "#2d6eb3" : "#2e2e3e" }}
+                    style={{
+                      background: isUser
+                        ? "linear-gradient(135deg, var(--accent), var(--accent-strong))"
+                        : "linear-gradient(180deg, rgba(255,255,255,0.04), transparent), var(--panel-ink)",
+                    }}
                   >
                     {!isUser && (
-                      <p className="text-[10px] text-[#818cf8] mb-0.5">{msg.author}</p>
+                      <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-[var(--accent-strong)]">
+                        {msg.author}
+                      </p>
                     )}
                     <p className="whitespace-pre-wrap leading-relaxed">{msg.body}</p>
-                    <p className={`text-[9px] opacity-40 mt-1 ${isUser ? "text-right" : "text-left"}`}>
+                    <p className={`mt-1 text-[9px] opacity-60 ${isUser ? "text-right" : "text-left"}`}>
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
@@ -141,11 +158,11 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
             })}
           </div>
 
-          <div className="border-t border-[#2a2a38] px-3 py-2 shrink-0">
+          <div className="border-t border-[var(--border-soft)] px-4 py-3">
             <textarea
               ref={textareaRefCallback}
-              className="w-full bg-[#12121f] border border-[#2a2a38] rounded-xl px-3 py-2 text-[12px] font-mono text-white placeholder-[#475569] focus:outline-none focus:border-[#6366f1] resize-none"
-              placeholder="Message..."
+              className="field-shell min-h-[78px] resize-none px-3 py-3 text-[12px]"
+              placeholder="Write a reply..."
               rows={2}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -156,13 +173,14 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
                 }
               }}
             />
-            <div className="flex justify-end mt-1.5">
+            <div className="mt-2 flex justify-end">
               <button
-                className="px-3 py-1 bg-[#6366f1] hover:bg-[#818cf8] text-white text-[10px] font-mono rounded disabled:opacity-40 transition-colors"
+                type="button"
+                className="action-button action-button--accent !px-3.5 !py-2"
                 disabled={!input.trim() || sendMutation.isPending}
                 onClick={() => sendMutation.mutate()}
               >
-                send
+                {sendMutation.isPending ? "Sending" : "Send"}
               </button>
             </div>
           </div>
@@ -172,11 +190,7 @@ function ChatThreadWindow({ agentId, leftOffset, bottomOffset, unread, onClose }
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main widget — docked bar + conversation list
-// ---------------------------------------------------------------------------
-
-export function ChatWidget() {
+export function ChatWidget({ embedded = false }: { embedded?: boolean }) {
   const queryClient = useQueryClient();
   const chatOpen = useBoardStore((s) => s.chatOpen);
   const setChatOpen = useBoardStore((s) => s.setChatOpen);
@@ -190,14 +204,12 @@ export function ChatWidget() {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
-  // Listen for keyboard shortcut "chat-new" event
   useEffect(() => {
     const handler = () => setShowNewChat(true);
     window.addEventListener("kb:chat-new", handler);
     return () => window.removeEventListener("kb:chat-new", handler);
   }, []);
 
-  // Close overflow popover on outside click
   useEffect(() => {
     if (!overflowOpen) return;
     const handler = (e: MouseEvent) => {
@@ -268,9 +280,7 @@ export function ChatWidget() {
   });
 
   const toggleThread = (agentId: string) => {
-    setOpenThreads((prev) =>
-      prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
-    );
+    setOpenThreads((prev) => (prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]));
   };
 
   const openNewChat = (agentKey: string) => {
@@ -283,122 +293,123 @@ export function ChatWidget() {
     setHighlightedIndex(-1);
   };
 
-  // Only pulse the main bar for unread in threads that aren't open
   const unreadInClosedThreads = conversations
     .filter((c) => !openThreads.includes(c.agentId))
     .reduce((sum, c) => sum + c.unread, 0);
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread, 0);
+  const dockOffsetStyle = {
+    "--chat-dock-offset": embedded ? "0px" : `${summaryBarHeight}px`,
+  } as CSSProperties;
+
+  const threadDockClass = embedded
+    ? "fixed bottom-4 left-4 right-4 z-40 overflow-x-auto"
+    : "fixed bottom-[calc(var(--chat-dock-offset)+0.75rem)] left-0 right-0 z-40 overflow-x-auto md:bottom-[calc(var(--chat-dock-offset)+1.25rem)]";
+
+  const mainDockClass = embedded
+    ? "w-full"
+    : "fixed bottom-[calc(var(--chat-dock-offset)+0.75rem)] left-0 z-40 w-[468px] max-w-full px-3 md:bottom-[calc(var(--chat-dock-offset)+1.25rem)] md:px-4";
+
+  const mainPanelClass = embedded
+    ? "surface-panel surface-panel--soft overflow-hidden"
+    : "surface-panel surface-panel--raised overflow-hidden rounded-b-none border-b-0 shadow-2xl";
 
   return (
     <>
-      {/* Thread windows — first 3 visible slots */}
-      {openThreads.slice(0, 3).map((agentId, index) => {
-        const conv = conversations.find((c) => c.agentId === agentId);
-        return (
-          <ChatThreadWindow
-            key={agentId}
-            agentId={agentId}
-            leftOffset={450 + index * 330}
-            bottomOffset={summaryBarHeight}
-            unread={conv?.unread ?? 0}
-            onClose={() => toggleThread(agentId)}
-          />
-        );
-      })}
+      {openThreads.length > 0 && (
+        <div className={threadDockClass} style={dockOffsetStyle}>
+          <div className={`flex min-w-max items-end gap-3 ${embedded ? "" : "px-4"}`}>
+            {!embedded && <div className="w-[468px] max-w-full shrink-0" />}
 
-      {/* Overflow bar — shown when more than 3 threads are open */}
-      {openThreads.length > 3 && (() => {
-        const overflowIds = openThreads.slice(3);
-        const overflowUnread = overflowIds.reduce((sum, id) => {
-          const conv = conversations.find((c) => c.agentId === id);
-          return sum + (conv?.unread ?? 0);
-        }, 0);
-        const hasUnread = overflowUnread > 0;
-        return (
-          <div
-            ref={overflowRef}
-            className="fixed z-40"
-            style={{ bottom: summaryBarHeight, left: 1440 }}
-          >
-            {/* Popover — shown above the bar when open */}
-            {overflowOpen && (
-              <div
-                className="absolute w-[200px] border border-[#2a2a38] rounded-lg shadow-2xl overflow-hidden"
-                style={{ bottom: "calc(100% + 4px)", left: 0, background: "#1c1c28" }}
-              >
-                {overflowIds.map((id) => {
-                  const conv = conversations.find((c) => c.agentId === id);
-                  const unread = conv?.unread ?? 0;
-                  return (
+            {openThreads.slice(0, 3).map((agentId) => {
+              const conv = conversations.find((c) => c.agentId === agentId);
+              return (
+                <ChatThreadWindow
+                  key={agentId}
+                  agentId={agentId}
+                  unread={conv?.unread ?? 0}
+                  onClose={() => toggleThread(agentId)}
+                />
+              );
+            })}
+
+            {openThreads.length > 3 && (() => {
+              const overflowIds = openThreads.slice(3);
+              const overflowUnread = overflowIds.reduce((sum, id) => {
+                const conv = conversations.find((c) => c.agentId === id);
+                return sum + (conv?.unread ?? 0);
+              }, 0);
+              const hasUnread = overflowUnread > 0;
+
+              return (
+                <div ref={overflowRef} className="relative shrink-0">
+                  {overflowOpen && (
                     <div
-                      key={id}
-                      className="px-3 py-2 text-[12px] font-mono text-[#e2e8f0] hover:bg-[#22222e] cursor-pointer flex items-center justify-between"
-                      onClick={() => swapOverflow(id)}
+                      className="surface-panel surface-panel--raised absolute bottom-[calc(100%+8px)] left-0 w-[220px] overflow-hidden shadow-2xl"
                     >
-                      <span className="truncate">{id}</span>
-                      {unread > 0 && (
-                        <span className="w-4 h-4 rounded-full bg-[#6366f1] text-white text-[9px] font-bold flex items-center justify-center shrink-0 ml-2">
-                          {unread}
-                        </span>
-                      )}
+                      {overflowIds.map((id) => {
+                        const conv = conversations.find((c) => c.agentId === id);
+                        const unread = conv?.unread ?? 0;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            className="flex w-full items-center justify-between border-b border-[var(--border-soft)] px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--accent-surface)]"
+                            onClick={() => swapOverflow(id)}
+                          >
+                            <span className="truncate text-[12px] font-mono text-[var(--text-primary)]">{id}</span>
+                            {unread > 0 && <UnreadBadge count={unread} />}
+                          </button>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  )}
 
-            {/* The bar itself */}
-            <div
-              className={`w-[200px] flex items-center justify-between px-3 py-2.5 border border-b-0 border-[#2a2a38] rounded-t-lg cursor-pointer select-none hover:bg-[#22222e] transition-colors ${
-                hasUnread ? "chat-bar-glow" : ""
-              }`}
-              style={{ background: "#1c1c28" }}
-              onClick={() => setOverflowOpen((v) => !v)}
-            >
-              <span className="text-[11px] font-mono text-[#e2e8f0]">
-                +{overflowIds.length} more
-              </span>
-              {hasUnread && (
-                <span className="w-4 h-4 rounded-full bg-[#6366f1] text-white text-[9px] font-bold flex items-center justify-center shrink-0 ml-2">
-                  {overflowUnread}
-                </span>
-              )}
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => setOverflowOpen((v) => !v)}
+                    className={`surface-panel surface-panel--raised flex w-[220px] max-w-[calc(100vw-2rem)] items-center justify-between rounded-b-none border-b-0 px-4 py-3 text-left shadow-2xl ${
+                      hasUnread ? "chat-bar-glow" : ""
+                    }`}
+                  >
+                    <span className="text-[12px] font-semibold text-[var(--text-primary)]">+{overflowIds.length} more</span>
+                    {hasUnread && <UnreadBadge count={overflowUnread} />}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
-        );
-      })()}
+        </div>
+      )}
 
-      {/* Main widget */}
-      <div className="fixed left-0 w-[440px] z-40" style={{ bottom: summaryBarHeight }}>
-        {/* Conversation list panel */}
+      <div className={mainDockClass} style={embedded ? undefined : dockOffsetStyle}>
         {chatOpen && (
-          <div
-            className="flex flex-col border border-b-0 border-[#2a2a38] rounded-t-lg overflow-hidden shadow-2xl"
-            style={{ maxHeight: 320, background: "#1c1c28" }}
-          >
-            {/* Panel header — click to collapse */}
+          <div className={mainPanelClass}>
             <div
-              className="flex items-center justify-between px-4 py-2.5 border-b border-[#2a2a38] shrink-0 cursor-pointer hover:bg-[#22222e] transition-colors select-none"
+              className="flex cursor-pointer items-center justify-between border-b border-[var(--border-soft)] px-4 py-3"
               onClick={() => setChatOpen(false)}
             >
-              <span className="text-[10px] font-mono text-[#475569] uppercase tracking-wider">
-                Conversations
-              </span>
+              <div>
+                <div className="meta-label mb-1">Communications</div>
+                <p className="text-[13px] font-semibold text-[var(--text-primary)]">Agent Conversations</p>
+              </div>
               <button
-                className="text-[11px] font-mono text-[#6366f1] hover:text-[#818cf8] transition-colors"
-                onClick={(e) => { e.stopPropagation(); setShowNewChat((v) => !v); }}
+                type="button"
+                className="action-button action-button--accent !px-3 !py-1.5 !text-[0.58rem]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowNewChat((v) => !v);
+                }}
               >
-                + new
+                New
               </button>
             </div>
 
-            {/* New chat input with autocomplete */}
             {showNewChat && (
-              <div className="relative border-b border-[#2a2a38] shrink-0">
-                <div className="flex gap-2 px-4 py-2">
+              <div className="relative border-b border-[var(--border-soft)] px-4 py-3">
+                <div className="flex gap-2">
                   <input
-                    className="flex-1 bg-[#12121f] border border-[#2a2a38] rounded px-2 py-1 text-xs font-mono text-white placeholder-[#475569] focus:outline-none focus:border-[#6366f1]"
-                    placeholder="Agent key (e.g. implementer)"
+                    className="field-shell flex-1 px-3 py-2 text-xs"
+                    placeholder="Agent key, for example implementer"
                     value={newAgentKey}
                     onChange={(e) => {
                       setNewAgentKey(e.target.value);
@@ -410,9 +421,7 @@ export function ChatWidget() {
                     onKeyDown={(e) => {
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setHighlightedIndex((i) =>
-                          Math.min(i + 1, Math.min(suggestions.length, 6) - 1)
-                        );
+                        setHighlightedIndex((i) => Math.min(i + 1, Math.min(suggestions.length, 6) - 1));
                       } else if (e.key === "ArrowUp") {
                         e.preventDefault();
                         setHighlightedIndex((i) => Math.max(i - 1, -1));
@@ -431,27 +440,26 @@ export function ChatWidget() {
                     autoFocus
                   />
                   <button
-                    className="px-3 py-1 bg-[#6366f1] hover:bg-[#818cf8] text-white text-xs font-mono rounded disabled:opacity-40 transition-colors"
+                    type="button"
+                    className="action-button action-button--accent !px-3.5 !py-2"
                     disabled={!newAgentKey.trim()}
                     onClick={() => openNewChat(newAgentKey.trim())}
                   >
-                    open
+                    Open
                   </button>
                 </div>
+
                 {showDropdown && (
-                  <div
-                    className="absolute left-0 right-0 z-50 border border-[#2a2a38] rounded-b overflow-hidden shadow-lg"
-                    style={{ background: "#1c1c28", top: "100%", marginTop: -1 }}
-                  >
+                  <div className="surface-panel surface-panel--raised absolute left-4 right-4 top-[calc(100%-2px)] z-50 overflow-hidden shadow-2xl">
                     {suggestions.slice(0, 6).map((id, i) => (
-                      <div
+                      <button
                         key={id}
-                        className="px-4 font-mono text-[12px] text-[#e2e8f0] cursor-pointer select-none flex items-center"
-                        style={{
-                          height: 28,
-                          background: i === highlightedIndex ? "#22222e" : undefined,
-                          color: i === highlightedIndex ? "#818cf8" : "#e2e8f0",
-                        }}
+                        type="button"
+                        className={`flex w-full items-center border-b border-[var(--border-soft)] px-4 py-2.5 text-left text-[12px] font-mono last:border-b-0 ${
+                          i === highlightedIndex
+                            ? "bg-[var(--accent-surface)] text-[var(--accent-strong)]"
+                            : "text-[var(--text-primary)] hover:bg-[var(--panel-hover)]"
+                        }`}
                         onMouseEnter={() => setHighlightedIndex(i)}
                         onMouseDown={(e) => {
                           e.preventDefault();
@@ -459,59 +467,67 @@ export function ChatWidget() {
                         }}
                       >
                         {id}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
               </div>
             )}
 
-            {/* List */}
-            <div className="overflow-y-auto divide-y divide-[#2a2a38]">
+            <div className="max-h-[320px] overflow-y-auto p-2">
               {conversations.length === 0 ? (
-                <p className="text-[#475569] text-[11px] font-mono text-center py-8">
-                  No conversations yet.{" "}
-                  <button
-                    className="text-[#6366f1] hover:text-[#818cf8]"
-                    onClick={() => setShowNewChat(true)}
-                  >
-                    + new
-                  </button>
-                </p>
+                <div className="px-4 py-6 text-center">
+                  <div className="meta-label mb-2">No Threads</div>
+                  <p className="text-[11px] font-mono text-[var(--text-dim)]">
+                    No conversations yet.{" "}
+                    <button
+                      type="button"
+                      className="text-[var(--accent-strong)] hover:text-[var(--text-primary)]"
+                      onClick={() => setShowNewChat(true)}
+                    >
+                      Start one
+                    </button>
+                    .
+                  </p>
+                </div>
               ) : (
                 conversations.map((c) => {
                   const isOpen = openThreads.includes(c.agentId);
                   return (
                     <div
                       key={c.agentId}
-                      className={`group w-full flex items-center justify-between px-4 py-2.5 transition-colors cursor-pointer ${
-                        isOpen ? "bg-[#22222e]" : "hover:bg-[#22222e]"
+                      className={`group mb-2 flex cursor-pointer items-center justify-between rounded-[18px] border px-3 py-3 transition-colors last:mb-0 ${
+                        isOpen
+                          ? "border-[var(--accent-border)] bg-[var(--accent-surface)]"
+                          : "border-[var(--border-soft)] hover:bg-[var(--panel-hover)]"
                       }`}
                       onClick={() => toggleThread(c.agentId)}
                     >
-                      <div className="min-w-0 flex items-center gap-2">
-                        {isOpen && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#6366f1] shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-[12px] font-mono text-[#e2e8f0] truncate">{c.agentId}</p>
-                          <p className="text-[10px] font-mono text-[#475569]">
-                            {formatTimestamp(c.lastAt)}
-                          </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          {isOpen && <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />}
+                          <p className="truncate text-[12px] font-semibold text-[var(--text-primary)]">{c.agentId}</p>
                         </div>
+                        <p className="mt-1 text-[10px] font-mono text-[var(--text-faint)]">{formatTimestamp(c.lastAt)}</p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-2">
-                        {c.unread > 0 && (
-                          <span className="w-5 h-5 rounded-full bg-[#6366f1] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                            {c.unread}
-                          </span>
-                        )}
+                      <div className="ml-2 flex shrink-0 items-center gap-2">
+                        {c.unread > 0 && <UnreadBadge count={c.unread} />}
                         <button
-                          className="text-[#475569] hover:text-[#ef4444] opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(c.agentId); }}
+                          type="button"
+                          className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--text-dim)] hover:text-[var(--danger)]"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteMutation.mutate(c.agentId);
+                          }}
                         >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
                           </svg>
                         </button>
                       </div>
@@ -523,34 +539,45 @@ export function ChatWidget() {
           </div>
         )}
 
-        {/* Docked bar */}
-        <button
-          onClick={() => setChatOpen(!chatOpen)}
-          className={`w-full flex items-center gap-2.5 px-4 py-2 border border-b-0 border-[#2a2a38] rounded-t bg-[#0a0a0f] hover:bg-[#111118] transition-colors text-left ${
-            unreadInClosedThreads > 0 ? "chat-bar-glow" : ""
-          }`}
-        >
-          <svg className="w-3.5 h-3.5 text-[#6366f1] shrink-0" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
-          </svg>
+        {(!embedded || !chatOpen) && (
+          <button
+            type="button"
+            onClick={() => setChatOpen(!chatOpen)}
+            className={`surface-panel flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--panel-hover)] ${
+              embedded
+                ? "surface-panel--soft"
+                : "rounded-b-none border-b-0 shadow-2xl"
+            } ${unreadInClosedThreads > 0 ? "chat-bar-glow" : ""}`}
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-surface)] text-[var(--accent-strong)]">
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20 2H4C2.9 2 2 2.9 2 4v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Z" />
+              </svg>
+            </div>
 
-          <span className="text-[10px] font-mono text-[#475569] uppercase tracking-wider shrink-0">
-            Agent Chat
-          </span>
+            <div className="min-w-0">
+              <div className="meta-label mb-1">Agent Chat</div>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-semibold text-[var(--text-primary)]">Conversations</span>
+                {totalUnread > 0 && <UnreadBadge count={totalUnread} />}
+              </div>
+            </div>
 
-          {totalUnread > 0 && (
-            <span className="w-4 h-4 rounded-full bg-[#6366f1] text-white text-[9px] font-bold flex items-center justify-center shrink-0">
-              {totalUnread}
+            <span className="ml-auto flex items-center gap-2 text-[10px] font-mono text-[var(--text-faint)]">
+              <ShortcutBadge shortcut={chatHint} />
+              {chatOpen ? "hide" : "open"}
             </span>
-          )}
-
-
-          <span className="ml-auto flex items-center gap-1 text-[10px] font-mono text-[#334155] shrink-0">
-            <ShortcutBadge shortcut={chatHint} />
-            {chatOpen ? "▼" : "▲"}
-          </span>
-        </button>
+          </button>
+        )}
       </div>
     </>
+  );
+}
+
+function UnreadBadge({ count }: { count: number }) {
+  return (
+    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[9px] font-bold text-white">
+      {count}
+    </span>
   );
 }

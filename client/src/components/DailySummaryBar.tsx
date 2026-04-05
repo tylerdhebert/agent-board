@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Card, Epic, Feature } from "../api/types";
@@ -6,10 +6,17 @@ import { useBoardStore } from "../store";
 import { useShortcutHint } from "../hooks/useShortcutHint";
 import { ShortcutBadge } from "./ShortcutBadge";
 
+function formatLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function dateKey(offsetDays = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  return formatLocalDateKey(d);
 }
 
 function formatDate(iso: string): string {
@@ -20,27 +27,29 @@ function formatDate(iso: string): string {
   );
 }
 
-export function DailySummaryBar() {
+export function DailySummaryBar({ embedded = false }: { embedded?: boolean }) {
   const summaryExpanded = useBoardStore((s) => s.summaryExpanded);
   const setSummaryExpanded = useBoardStore((s) => s.setSummaryExpanded);
   const setSummaryBarHeight = useBoardStore((s) => s.setSummaryBarHeight);
   const rootRef = useRef<HTMLDivElement>(null);
-  const [dayOffset, setDayOffset] = useState(0); // 0 = today, -1 = yesterday, etc.
+  const [dayOffset, setDayOffset] = useState(0);
   const toggleHint = useShortcutHint("toggle-summary");
   const prevHint = useShortcutHint("summary-prev");
   const nextHint = useShortcutHint("summary-next");
 
-  // Track this bar's height so ChatWidget can lift itself above it
   useEffect(() => {
+    if (embedded) {
+      setSummaryBarHeight(0);
+      return;
+    }
     const el = rootRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => setSummaryBarHeight(el.offsetHeight));
     ro.observe(el);
     setSummaryBarHeight(el.offsetHeight);
     return () => ro.disconnect();
-  }, [setSummaryBarHeight]);
+  }, [embedded, setSummaryBarHeight]);
 
-  // Listen for keyboard shortcut day navigation events
   useEffect(() => {
     const prev = () => setDayOffset((d) => d - 1);
     const next = () => setDayOffset((d) => (d < 0 ? d + 1 : d));
@@ -83,19 +92,21 @@ export function DailySummaryBar() {
   });
 
   const completedOnDay = allCards.filter(
-    (c) => typeof c.completedAt === "string" && c.completedAt.startsWith(targetDate)
+    (c) =>
+      typeof c.completedAt === "string"
+      && formatLocalDateKey(new Date(c.completedAt)) === targetDate
   );
 
   const epicLabel = (card: Card) => {
     if (card.featureId) {
-      const f = features.find((x) => x.id === card.featureId);
-      const e = f ? epics.find((x) => x.id === f.epicId) : null;
-      if (e && f) return `${e.title} › ${f.title}`;
-      if (f) return f.title;
+      const feature = features.find((item) => item.id === card.featureId);
+      const epic = feature ? epics.find((item) => item.id === feature.epicId) : null;
+      if (epic && feature) return `${epic.title} / ${feature.title}`;
+      if (feature) return feature.title;
     }
     if (card.epicId) {
-      const e = epics.find((x) => x.id === card.epicId);
-      if (e) return e.title;
+      const epic = epics.find((item) => item.id === card.epicId);
+      if (epic) return epic.title;
     }
     return null;
   };
@@ -106,98 +117,112 @@ export function DailySummaryBar() {
     task: "#6366f1",
   };
 
+  const shellClass = embedded
+    ? "surface-panel surface-panel--soft overflow-hidden"
+    : "shrink-0 border-t border-[var(--border-soft)] bg-[var(--panel)]";
+
   return (
-    <div ref={rootRef} className="shrink-0 border-t border-[#1e1e2a] bg-[#0a0a0f]">
-      {/* Collapsed bar — always visible */}
+    <div ref={rootRef} className={shellClass}>
       <button
+        type="button"
         onClick={() => setSummaryExpanded(!summaryExpanded)}
-        className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#111118] transition-colors text-left"
+        className={`w-full text-left transition-colors hover:bg-[var(--panel-hover)] ${
+          embedded ? "px-4 py-3" : "px-3 py-2.5 md:px-4"
+        }`}
       >
-        <span className="text-[10px] font-mono text-[#475569] uppercase tracking-wider shrink-0">
-          Daily Summary
-        </span>
-        <span className="text-[10px] font-mono text-[#334155]">|</span>
-        <span className="text-[10px] font-mono text-[#22c55e]">
-          {completedOnDay.length} completed{" "}
-          {isToday ? "today" : `on ${formatDate(targetDate)}`}
-        </span>
-        {completedOnDay.length > 0 && !summaryExpanded && (
-          <span className="flex gap-1.5 ml-1 overflow-hidden">
-            {completedOnDay.slice(0, 6).map((c) => (
-              <span
-                key={c.id}
-                className="text-[11px] font-mono text-[#64748b] truncate max-w-[120px]"
-              >
-                {c.title}
-              </span>
-            ))}
-            {completedOnDay.length > 6 && (
-              <span className="text-[10px] font-mono text-[#334155]">
-                +{completedOnDay.length - 6} more
-              </span>
-            )}
-          </span>
-        )}
-        <span className="ml-auto flex items-center gap-1 text-[10px] font-mono text-[#334155]">
-          <ShortcutBadge shortcut={toggleHint} />
-          {summaryExpanded ? "▼" : "▲"}
-        </span>
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">
+              Daily Review
+            </div>
+            <div className={`mt-1 ${embedded ? "text-[13px] font-semibold" : "text-[12px]"} text-[var(--text-primary)]`}>
+              {completedOnDay.length} completed {isToday ? "today" : `on ${formatDate(targetDate)}`}
+            </div>
+          </div>
+
+          {completedOnDay.length > 0 && !summaryExpanded && (
+            <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+              {completedOnDay.slice(0, 5).map((card) => (
+                <span
+                  key={card.id}
+                  className="stat-pill !rounded-[10px] !px-2.5 !py-1 !text-[0.58rem]"
+                >
+                  {card.title}
+                </span>
+              ))}
+              {completedOnDay.length > 5 && (
+                <span className="stat-pill !rounded-[10px] !px-2.5 !py-1 !text-[0.58rem]">
+                  +{completedOnDay.length - 5} more
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="ml-auto flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
+            <ShortcutBadge shortcut={toggleHint} />
+            {summaryExpanded ? "Collapse" : "Expand"}
+          </div>
+        </div>
       </button>
 
-      {/* Expanded panel */}
       {summaryExpanded && (
-        <div className="border-t border-[#1e1e2a] bg-[#0d0d14] max-h-64 overflow-y-auto">
-          {/* Day navigation */}
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-[#1e1e2a] sticky top-0 bg-[#0d0d14]">
+        <div className={`border-t border-[var(--border-soft)] ${embedded ? "bg-[var(--panel)]" : "bg-[var(--panel-soft)]"}`}>
+          <div className={`flex items-center gap-2 border-b border-[var(--border-soft)] ${embedded ? "px-4 py-3" : "px-3 py-2.5 md:px-4"}`}>
             <button
+              type="button"
               onClick={() => setDayOffset((d) => d - 1)}
-              className="flex items-center gap-1 text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] transition-colors"
+              className="chrome-button chrome-button--compact"
             >
               <ShortcutBadge shortcut={prevHint} />
-              ← prev
+              Prev
             </button>
-            <span className="text-[11px] font-mono text-[#e2e8f0] flex-1 text-center">
+            <span className="flex-1 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-secondary)]">
               {isToday ? "Today" : formatDate(targetDate)}
             </span>
             <button
+              type="button"
               onClick={() => setDayOffset((d) => d + 1)}
               disabled={dayOffset >= 0}
-              className="flex items-center gap-1 text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="chrome-button chrome-button--compact disabled:opacity-35"
             >
-              next →
+              Next
               <ShortcutBadge shortcut={nextHint} />
             </button>
           </div>
 
-          {/* Card list */}
           {completedOnDay.length === 0 ? (
-            <div className="px-4 py-6 text-center text-[11px] font-mono text-[#334155]">
+            <div className="px-4 py-7 text-center text-[12px] text-[var(--text-faint)]">
               No cards completed {isToday ? "today" : "on this day"}.
             </div>
           ) : (
-            <div className="divide-y divide-[#1e1e2a]">
-              {completedOnDay.map((card) => {
-                const label = epicLabel(card);
-                return (
-                  <div key={card.id} className="flex items-center gap-3 px-4 py-2">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ backgroundColor: typeDot[card.type] ?? "#475569" }}
-                    />
-                    <span className="text-[12px] font-mono text-[#e2e8f0] flex-1 min-w-0 truncate">
-                      {card.title}
-                    </span>
-                    {label && (
-                      <span className="text-[10px] font-mono text-[#475569] shrink-0 truncate max-w-[200px]">
-                        {label}
+            <div className={`overflow-y-auto ${embedded ? "max-h-[260px] px-4 py-4" : "max-h-64 px-3 py-3 md:px-4"}`}>
+              <div className="grid gap-2">
+                {completedOnDay.map((card) => {
+                  const label = epicLabel(card);
+                  return (
+                    <div
+                      key={card.id}
+                      className="surface-panel surface-panel--soft flex items-center gap-3 rounded-[14px] px-3.5 py-3"
+                    >
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: typeDot[card.type] ?? "#475569" }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--text-primary)]">
+                        {card.title}
                       </span>
-                    )}
-                    <span className="text-[10px] font-mono text-[#334155] shrink-0 uppercase">
-                      {card.type}
-                    </span>
-                  </div>
-                );
-              })}
+                      {label && (
+                        <span className="hidden max-w-[260px] truncate text-[11px] text-[var(--text-muted)] lg:inline">
+                          {label}
+                        </span>
+                      )}
+                      <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                        {card.type}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

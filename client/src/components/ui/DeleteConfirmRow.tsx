@@ -53,7 +53,7 @@ export function DeleteConfirmRow({
       <button
         onClick={onStartConfirm}
         disabled={disabled}
-        className="text-[11px] font-mono text-[#64748b] hover:text-[#f87171] transition-colors"
+        className="text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors"
       >
         {triggerLabel}
       </button>
@@ -63,18 +63,18 @@ export function DeleteConfirmRow({
   return (
     <div className="flex items-center gap-2">
       {warningText && (
-        <span className="text-[10px] font-mono text-[#f87171]">{warningText}</span>
+        <span className="text-[10px] font-mono text-[var(--danger)]">{warningText}</span>
       )}
       <button
         onClick={onCancel}
-        className="text-[11px] font-mono text-[#64748b] hover:text-[#94a3b8] transition-colors"
+        className="text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
       >
         Cancel
       </button>
       <button
         onClick={onConfirm}
         disabled={isPending}
-        className="px-2 py-0.5 bg-[#3b1f1f] border border-[#7f1d1d] hover:bg-[#5c1f1f] disabled:opacity-50 text-[#f87171] font-mono text-[11px] rounded-sm transition-colors"
+        className="action-button action-button--danger !rounded-full !px-3 !py-1.5 !text-[0.6rem]"
       >
         {isPending && pendingLabel ? pendingLabel : confirmLabel}
       </button>

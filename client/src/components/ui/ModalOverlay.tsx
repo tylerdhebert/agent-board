@@ -29,11 +29,11 @@ export function ModalOverlay({
 }: ModalOverlayProps) {
   return (
     <div
-      className={`fixed inset-0 ${zIndex} flex items-center justify-center bg-black/60 backdrop-blur-sm`}
+      className={`fixed inset-0 ${zIndex} flex items-center justify-center bg-black/45 backdrop-blur-xl`}
       onClick={onClose}
     >
       <div
-        className={`relative w-full mx-4 bg-[#111118] border border-[#2a2a38] rounded-sm shadow-2xl ${className}`}
+        className={`modal-shell relative w-full mx-4 ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

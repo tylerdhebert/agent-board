@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { api } from "../api/client";
-import type { Card, Epic, Workflow, WorkflowStatus } from "../api/types";
+import type { Card, Epic, Status, Workflow, WorkflowStatus } from "../api/types";
 import { KanbanColumn } from "./KanbanColumn";
 import { EpicPicker } from "./EpicPicker";
 import { BaseBranchPanel } from "./BaseBranchPanel";
@@ -30,6 +30,15 @@ export function Board() {
     staleTime: 30_000,
   });
 
+  const { data: statuses = [], isLoading: statusesLoading } = useQuery<Status[]>({
+    queryKey: ["statuses"],
+    queryFn: async () => {
+      const { data } = await api.api.statuses.get();
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
   const selectedEpic = epics.find((e) => e.id === selectedEpicId) ?? null;
   const workflowId = selectedEpic?.workflowId ?? null;
 
@@ -52,7 +61,6 @@ export function Board() {
     staleTime: 30_000,
   });
 
-  // Fetch all card dependencies to compute which cards are blocked (N+1-free: one request)
   const { data: allDependencies = [] } = useQuery<{ blockerCardId: string; blockedCardId: string }[]>({
     queryKey: ["card-dependencies-all"],
     queryFn: async () => {
@@ -62,21 +70,15 @@ export function Board() {
     staleTime: 30_000,
   });
 
-  // If no epic is selected, show the epic picker
   if (!selectedEpicId) {
     return <EpicPicker />;
   }
 
   const epicCards = cards.filter((c) => c.epicId === selectedEpicId);
-
-  // Build set of card IDs that have at least one non-Done blocker
+  const doneStatusId = statuses.find((status) => status.name.toLowerCase() === "done")?.id;
   const doneCardIds = new Set(
     cards
-      .filter((c) => {
-        // We'd need statuses here to check by name; use completedAt as a proxy for Done
-        // Cards that have completedAt set are done; this avoids needing statuses in Board
-        return c.completedAt !== null;
-      })
+      .filter((c) => c.statusId === doneStatusId)
       .map((c) => c.id)
   );
   const blockedCardIds = new Set<string>(
@@ -84,18 +86,16 @@ export function Board() {
       .filter((dep) => !doneCardIds.has(dep.blockerCardId))
       .map((dep) => dep.blockedCardId)
   );
-  const visibleCards = hierarchyFilter.type === "feature"
-    ? epicCards.filter((c) => c.featureId === hierarchyFilter.id)
-    : epicCards;
-
-  const isLoading = cardsLoading || (!!workflowId && workflowLoading);
+  const visibleCards =
+    hierarchyFilter.type === "feature"
+      ? epicCards.filter((c) => c.featureId === hierarchyFilter.id)
+      : epicCards;
+  const isLoading = cardsLoading || statusesLoading || (!!workflowId && workflowLoading);
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="text-[#334155] font-mono text-xs animate-pulse">
-          loading...
-        </span>
+      <div className="surface-panel surface-panel--soft flex flex-1 items-center justify-center">
+        <span className="text-xs font-mono text-[var(--text-faint)] animate-pulse">loading...</span>
       </div>
     );
   }
@@ -110,24 +110,68 @@ export function Board() {
     setHierarchyFilter({ type: "all" });
   };
 
+  const filterLabel =
+    hierarchyFilter.type === "feature"
+      ? "Feature focus"
+      : hierarchyFilter.type === "epic"
+        ? "Epic overview"
+        : "All cards";
+
+  const epicDescription = selectedEpic?.description?.trim()
+    ? selectedEpic.description
+    : "Track execution across statuses, surface blockers early, and keep the current epic legible at a glance.";
+
   return (
-    <div className="flex-1 flex min-h-0 overflow-hidden">
-      <div className="flex-1 flex flex-col min-h-0 min-w-0">
-        {/* Back button row */}
-        <div className="px-4 pt-3 pb-0 shrink-0">
-          <button
-            onClick={handleBackToEpics}
-            className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] transition-colors"
-          >
-            ← All Epics
-          </button>
+    <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4 md:p-6">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="surface-panel surface-panel--soft mb-4 shrink-0 px-4 py-3.5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleBackToEpics}
+                  className="chrome-button chrome-button--compact"
+                >
+                  Back to epics
+                </button>
+                {currentWorkflow && (
+                  <span className="stat-pill">
+                    {currentWorkflow.type}
+                  </span>
+                )}
+                <span className="stat-pill">{filterLabel}</span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h2 className="display-title text-[2rem] leading-none md:text-[2.35rem]">
+                  {selectedEpic?.title ?? "Epic board"}
+                </h2>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                  {visibleCards.length} visible
+                </span>
+              </div>
+
+              <p className="mt-1.5 max-w-4xl text-[12px] leading-relaxed text-[var(--text-muted)]">
+                {epicDescription}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 xl:max-w-[340px] xl:justify-end">
+              <MetricPill label="Cards" value={String(epicCards.length)} />
+              <MetricPill label="Visible" value={String(visibleCards.length)} />
+              <MetricPill
+                label="Blocked"
+                value={String(visibleCards.filter((card) => blockedCardIds.has(card.id)).length)}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Columns */}
-        <div className="flex-1 flex gap-3 p-4 overflow-x-auto overflow-y-hidden min-h-0">
+        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden pb-2 pr-1">
           {workflowStatuses.length === 0 && !workflowId && (
-            <div className="flex-1 flex items-center justify-center">
-              <span className="text-[#334155] font-mono text-xs">
+            <div className="surface-panel surface-panel--soft flex flex-1 items-center justify-center px-4 py-10">
+              <span className="text-xs font-mono text-[var(--text-faint)]">
                 No workflow assigned to this epic.
               </span>
             </div>
@@ -135,14 +179,31 @@ export function Board() {
           {workflowStatuses.map((ws) => {
             const columnCards = visibleCards.filter((c) => c.statusId === ws.statusId);
             return (
-              <KanbanColumn key={ws.id} workflowStatus={ws} cards={columnCards} blockedCardIds={blockedCardIds} />
+              <KanbanColumn
+                key={ws.id}
+                workflowStatus={ws}
+                cards={columnCards}
+                blockedCardIds={blockedCardIds}
+              />
             );
           })}
         </div>
       </div>
 
-      {/* BaseBranchPanel for worktree epics */}
       {isWorktree && <BaseBranchPanel epicId={selectedEpicId} />}
+    </div>
+  );
+}
+
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="surface-panel min-w-[90px] bg-transparent px-3 py-2.5">
+      <div className="text-[9px] font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+        {label}
+      </div>
+      <div className="mt-1 text-lg font-semibold text-[var(--text-primary)]">
+        {value}
+      </div>
     </div>
   );
 }

@@ -144,6 +144,7 @@ export const inputRequests = sqliteTable("input_requests", {
   cardId: text("card_id")
     .notNull()
     .references(() => cards.id, { onDelete: "cascade" }),
+  previousStatusId: text("previous_status_id"),
   questions: text("questions").notNull(), // JSON string
   answers: text("answers"), // JSON string, null until answered
   status: text("status", {

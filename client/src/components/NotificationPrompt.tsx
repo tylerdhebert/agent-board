@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export function NotificationPrompt() {
+export function NotificationPrompt({ embedded = false }: { embedded?: boolean }) {
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification !== "undefined" ? Notification.permission : "granted"
   );
@@ -13,31 +13,66 @@ export function NotificationPrompt() {
     setPermission(result);
   };
 
-  const handleDismiss = () => {
-    setDismissed(true);
-  };
+  if (embedded) {
+    return (
+      <section className="surface-panel surface-panel--soft overflow-hidden">
+        <div className="border-b border-[var(--border-soft)] px-4 py-3">
+          <div className="meta-label mb-1.5">Attention Layer</div>
+          <p className="text-[15px] font-semibold text-[var(--text-primary)]">
+            Enable desktop notifications
+          </p>
+          <p className="mt-2 text-[12px] leading-relaxed text-[var(--text-muted)]">
+            Stay alerted when an agent needs a decision, even if this tab drifts into the
+            background.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 px-4 py-4">
+          <button
+            onClick={handleEnable}
+            className="action-button action-button--accent !px-4 !py-2 !text-[0.6rem]"
+          >
+            Enable
+          </button>
+          <button
+            onClick={() => setDismissed(true)}
+            className="action-button action-button--ghost !px-4 !py-2 !text-[0.6rem]"
+          >
+            Not now
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-full max-w-xs bg-[#1a1a24] border border-[#3a3a4a] rounded-sm shadow-lg p-4">
-      <div className="flex items-start gap-3">
-        <span className="text-lg leading-none shrink-0">🔔</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-mono font-semibold text-[#e2e8f0]">
+    <div className="fixed bottom-5 right-5 z-40 w-full max-w-sm rounded-[24px] border border-[var(--border)] bg-[var(--panel-raised)] p-5 shadow-[0_26px_60px_rgba(0,0,0,0.18)]">
+      <div className="section-kicker mb-3">
+        <span className="section-kicker__dot" />
+        Attention Layer
+      </div>
+      <div className="flex items-start gap-4">
+        <div className="brand-mark !h-11 !w-11 !rounded-[16px]">
+          <span className="brand-mark__glyph">AL</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
             Enable notifications
           </p>
-          <p className="text-xs font-mono text-[#64748b] mt-1 leading-relaxed">
-            Get alerted when an agent requests your input, even when this tab is in the background.
+          <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-muted)]">
+            Stay alerted when an agent needs a decision, even if this tab drifts into the
+            background.
           </p>
-          <div className="flex gap-3 mt-3">
+          <div className="mt-4 flex gap-2">
             <button
               onClick={handleEnable}
-              className="px-3 py-1.5 bg-[#6366f1] hover:bg-[#818cf8] text-white font-mono text-xs rounded-sm transition-colors"
+              className="chrome-button !border-[var(--accent)] !bg-[var(--accent)] !px-4 !py-2 !normal-case !tracking-normal !text-white"
             >
               Enable
             </button>
             <button
-              onClick={handleDismiss}
-              className="px-3 py-1.5 text-[#64748b] hover:text-[#94a3b8] font-mono text-xs transition-colors"
+              onClick={() => setDismissed(true)}
+              className="chrome-button !px-4 !py-2 !normal-case !tracking-normal"
             >
               Not now
             </button>

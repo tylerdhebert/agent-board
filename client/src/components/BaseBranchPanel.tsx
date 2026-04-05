@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { Feature, Repo, Commit, BuildResult } from "../api/types";
+import type { BuildResult, Commit, Feature, Repo } from "../api/types";
 import { CommitDiffModal } from "./CommitDiffModal";
 import { useBoardStore } from "../store";
 
@@ -31,12 +31,7 @@ export function BaseBranchPanel({ epicId }: Props) {
     staleTime: 30_000,
   });
 
-  // Features in this epic that have both a repo and a branch
-  const epicFeatures = allFeatures.filter(
-    (f) => f.epicId === epicId && f.repoId && f.branchName
-  );
-
-  // If a specific feature is selected in the sidebar, only show that one
+  const epicFeatures = allFeatures.filter((f) => f.epicId === epicId && f.repoId && f.branchName);
   const visibleFeatures =
     hierarchyFilter.type === "feature"
       ? epicFeatures.filter((f) => f.id === hierarchyFilter.id)
@@ -44,36 +39,41 @@ export function BaseBranchPanel({ epicId }: Props) {
 
   return (
     <>
-      <div className="w-72 shrink-0 flex flex-col bg-[#0d0d14] border-l border-[#1e1e2a] overflow-y-auto">
-        {/* Panel header */}
-        <div className="px-3 py-2.5 border-b border-[#1e1e2a] shrink-0">
-          <span className="text-[11px] font-mono text-[#475569] uppercase tracking-wider">
-            Branch Commits
-          </span>
+      <aside className="surface-panel surface-panel--soft hidden w-[282px] shrink-0 overflow-hidden xl:flex xl:flex-col">
+        <div className="border-b border-[var(--border-soft)] px-4 py-3">
+          <div className="meta-label mb-1.5">Branches</div>
+          <h3 className="text-[0.95rem] font-semibold text-[var(--text-primary)]">
+            Branch monitor
+          </h3>
+          <p className="mt-2 text-[12px] leading-relaxed text-[var(--text-muted)]">
+            Commits and build health for the branches attached to this epic.
+          </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-2.5">
           {visibleFeatures.length === 0 ? (
-            <div className="px-3 py-4 text-[11px] font-mono text-[#334155]">
+            <div className="surface-panel bg-transparent px-4 py-5 text-[11px] font-mono text-[var(--text-dim)]">
               {epicFeatures.length === 0
-                ? "No features with a branch configured."
-                : "Selected feature has no branch configured."}
+                ? "No features in this epic have a configured repo branch."
+                : "The selected feature does not have a configured repo branch."}
             </div>
           ) : (
-            visibleFeatures.map((feature) => {
-              const repo = allRepos.find((r) => r.id === feature.repoId);
-              return (
-                <FeatureSection
-                  key={feature.id}
-                  feature={feature}
-                  repo={repo ?? null}
-                  onCommitClick={(commit) => setSelectedCommit({ featureId: feature.id, commit })}
-                />
-              );
-            })
+            <div className="space-y-2.5">
+              {visibleFeatures.map((feature) => {
+                const repo = allRepos.find((r) => r.id === feature.repoId);
+                return (
+                  <FeatureSection
+                    key={feature.id}
+                    feature={feature}
+                    repo={repo ?? null}
+                    onCommitClick={(commit) => setSelectedCommit({ featureId: feature.id, commit })}
+                  />
+                );
+              })}
+            </div>
           )}
         </div>
-      </div>
+      </aside>
 
       {selectedCommit && (
         <CommitDiffModal
@@ -130,101 +130,92 @@ function FeatureSection({ feature, repo, onCommitClick }: FeatureSectionProps) {
     },
   });
 
-  const hasBuildCommand = !!(repo?.buildCommand);
+  const hasBuildCommand = !!repo?.buildCommand;
+  const buildLabel =
+    buildResult?.status === "passed"
+      ? "action-button action-button--success !px-3 !py-1.5 !text-[0.58rem]"
+      : buildResult?.status === "failed"
+        ? "action-button action-button--danger !px-3 !py-1.5 !text-[0.58rem]"
+        : "action-button action-button--muted !px-3 !py-1.5 !text-[0.58rem]";
 
   return (
-    <div className="border-b border-[#1e1e2a] last:border-b-0">
-      {/* Feature header */}
-      <div className="px-3 py-2 bg-[#111118] sticky top-0 z-10">
-        <p className="text-[11px] font-mono font-semibold text-[#94a3b8] truncate">
-          {feature.title}
-        </p>
-        <p className="text-[10px] font-mono text-[#475569] mt-0.5">
-          {repo && <span>{repo.name} / </span>}
-          <span className="text-[#818cf8]">⎇ {feature.branchName}</span>
-        </p>
-
-        {/* Build controls */}
-        {hasBuildCommand && (
-          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+    <section className="surface-panel overflow-hidden">
+      <div className="border-b border-[var(--border-soft)] px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{feature.title}</p>
+            <p className="mt-1 truncate text-[10px] font-mono text-[var(--text-faint)]">
+              {repo?.name ?? "unassigned repo"} / {feature.branchName}
+            </p>
+          </div>
+          {hasBuildCommand && (
             <button
+              type="button"
               onClick={() => {
                 setBuildOutputExpanded(false);
                 triggerBuildMutation.mutate();
               }}
               disabled={triggerBuildMutation.isPending || buildResult?.status === "running"}
-              className="px-2 py-0.5 bg-[#1a1a2e] border border-[#2a2a4a] hover:border-[#6366f1] disabled:opacity-50 text-[#818cf8] font-mono text-[10px] rounded-sm transition-colors"
+              className="action-button action-button--accent shrink-0 !px-3 !py-1.5 !text-[0.58rem]"
             >
-              {buildResult?.status === "running" ? "Building..." : "Run Build"}
+              {buildResult?.status === "running" ? "Building" : "Run build"}
             </button>
+          )}
+        </div>
 
-            {buildResult && (
-              <button
-                onClick={() => setBuildOutputExpanded((v) => !v)}
-                className={`flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] rounded-sm border transition-colors ${
-                  buildResult.status === "running"
-                    ? "border-[#2a2a4a] text-[#64748b] animate-pulse"
-                    : buildResult.status === "passed"
-                    ? "border-[#1a3a1a] text-[#4ade80] hover:border-[#4ade80]"
-                    : "border-[#3a1a1a] text-[#f87171] hover:border-[#f87171]"
-                }`}
-              >
-                {buildResult.status === "running" && (
-                  <span className="w-2 h-2 rounded-full bg-[#64748b] animate-pulse inline-block" />
-                )}
-                {buildResult.status === "passed" && <span>&#10003;</span>}
-                {buildResult.status === "failed" && <span>&#10007;</span>}
-                <span className="capitalize">{buildResult.status}</span>
-              </button>
-            )}
+        {buildResult && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBuildOutputExpanded((v) => !v)}
+              className={buildLabel}
+            >
+              {buildResult.status}
+            </button>
+            {repo?.baseBranch && <span className="stat-pill">base {repo.baseBranch}</span>}
           </div>
         )}
       </div>
 
-      {/* Build output */}
       {buildResult && buildOutputExpanded && buildResult.output && (
-        <div className="px-3 py-2 bg-[#0a0a0f] border-b border-[#1e1e2a]">
-          <pre className="text-[10px] font-mono text-[#94a3b8] whitespace-pre-wrap break-all max-h-48 overflow-y-auto leading-relaxed">
+        <div className="border-b border-[var(--border-soft)] bg-[var(--panel-ink)] px-4 py-3">
+          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-[var(--text-secondary)]">
             {buildResult.output}
           </pre>
         </div>
       )}
 
-      {/* Commits */}
       {isLoading ? (
-        <div className="px-3 py-3 space-y-1.5">
-          <div className="h-3 bg-[#1a1a24] rounded animate-pulse" />
-          <div className="h-3 bg-[#1a1a24] rounded animate-pulse w-4/5" />
+        <div className="space-y-2 px-4 py-4">
+          <div className="h-3 rounded-full bg-[var(--panel-hover)] animate-pulse" />
+          <div className="h-3 w-4/5 rounded-full bg-[var(--panel-hover)] animate-pulse" />
         </div>
       ) : commits.length === 0 ? (
-        <div className="px-3 py-3 text-[11px] font-mono text-[#334155]">
+        <div className="px-4 py-4 text-[11px] font-mono text-[var(--text-dim)]">
           No commits ahead of {repo?.baseBranch ?? "base"}.
         </div>
       ) : (
-        <div className="flex flex-col">
+        <div className="space-y-2 p-2">
           {commits.map((commit) => (
             <button
               key={commit.hash}
+              type="button"
               onClick={() => onCommitClick(commit)}
-              className="text-left px-3 py-2.5 border-b border-[#1a1a24] last:border-b-0 hover:bg-[#111118] transition-colors group"
+              className="w-full rounded-[14px] border border-[var(--border-soft)] px-3 py-3 text-left transition-colors hover:border-[var(--accent-border)] hover:bg-[var(--accent-surface)]"
             >
-              <p className="text-[12px] font-mono text-[#cbd5e1] leading-snug line-clamp-2 group-hover:text-[#e2e8f0]">
+              <p className="line-clamp-2 text-[12px] font-mono leading-snug text-[var(--text-secondary)]">
                 {commit.subject}
               </p>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-[10px] font-mono text-[#475569] truncate">
-                  {commit.author}
-                </span>
-                <span className="text-[10px] font-mono text-[#334155]">·</span>
-                <span className="text-[10px] font-mono text-[#334155] shrink-0">
-                  {formatCommitDate(commit.date)}
-                </span>
+              <div className="mt-2 flex items-center gap-2 text-[10px] font-mono text-[var(--text-faint)]">
+                <span className="truncate">{commit.author}</span>
+                <span>|</span>
+                <span className="shrink-0">{formatCommitDate(commit.date)}</span>
               </div>
             </button>
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

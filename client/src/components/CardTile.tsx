@@ -6,8 +6,6 @@ import { StatusBadge } from "./StatusBadge";
 interface Props {
   card: Card;
   status: Status;
-  // blockedCardIds: set of card IDs that have active (non-Done) blockers.
-  // Passed from the parent board to avoid N+1 fetches per card.
   blockedCardIds?: Set<string>;
 }
 
@@ -20,7 +18,6 @@ export function CardTile({ card, status, blockedCardIds }: Props) {
 
   const isPulsing = pulsingCardIds.has(card.id);
   const hasUnseenComment = unseenCommentCardIds.has(card.id);
-  // Whether this card has pending (non-Done) blockers
   const isBlocked = blockedCardIds?.has(card.id) ?? false;
 
   const handleClick = () => {
@@ -33,66 +30,67 @@ export function CardTile({ card, status, blockedCardIds }: Props) {
     <div
       onClick={handleClick}
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter") handleClick(); }}
-      className={`group relative cursor-pointer rounded-sm bg-[#1c1c28] border border-[#2a2a38] hover:border-[#3a3a4a] hover:bg-[#22222e] transition-colors duration-150 p-3.5 focus:outline-none focus:ring-1 focus:ring-[#3a3a4a] ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter") handleClick();
+      }}
+      className={`group relative cursor-pointer rounded-[18px] border border-[var(--border-soft)] bg-[var(--panel-soft)] p-3.5 transition-colors duration-150 hover:border-[var(--border)] hover:bg-[var(--panel-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-border)] ${
         isPulsing ? "card-pulse" : ""
       } ${hasUnseenComment ? "card-comment-glow" : ""}`}
-      style={{
-        borderLeft: `3px solid ${status.color}`,
-      }}
+      style={{ boxShadow: `inset 3px 0 0 ${status.color}` }}
     >
-      {/* Unseen comment badge */}
       {hasUnseenComment && (
-        <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#6366f1] flex items-center justify-center text-[9px] font-bold text-white animate-pulse z-10">
+        <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-white">
           !
         </span>
       )}
 
-      {/* Type + status row */}
-      <div className="flex items-center gap-1.5 mb-2">
+      <div className="mb-3 flex items-center gap-1.5">
         <TypeBadge type={card.type} />
         <StatusBadge status={status} />
-        {card.conflictedAt && (
-          <span className="ml-auto text-[10px] font-mono text-[#f59e0b]" title="Merge conflict detected">
-            &#9888;
-          </span>
-        )}
-        {isBlocked && (
-          <span className={`${card.conflictedAt ? "" : "ml-auto"} text-[10px] font-mono text-[#ef4444]`} title="Blocked by dependencies">
-            &#128274;
-          </span>
-        )}
-        {isPulsing && (
-          <span className={`${isBlocked || card.conflictedAt ? "" : "ml-auto"} text-[10px] font-mono text-red-400 animate-pulse`}>
-            INPUT
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {card.conflictedAt && (
+            <span className="rounded-[10px] border border-amber-400/30 bg-amber-400/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-amber-300">
+              conflict
+            </span>
+          )}
+          {isBlocked && (
+            <span className="rounded-[10px] border border-red-400/30 bg-red-400/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-red-300">
+              blocked
+            </span>
+          )}
+          {isPulsing && (
+            <span className="rounded-[10px] border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--text-primary)]">
+              input
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Title */}
-      <p className="text-[#e2e8f0] text-sm font-medium leading-snug line-clamp-2 mb-2">
+      <p className="line-clamp-3 text-[14px] font-semibold leading-snug text-[var(--text-primary)]">
         {card.title}
       </p>
 
-      {/* Branch badge */}
       {card.branchName && (
-        <div className="mb-2">
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-[#818cf8] bg-[#1a1a2e] border border-[#2a2a4a] px-1.5 py-0.5 rounded-sm max-w-full truncate">
-            ⎇ {card.branchName}
+        <div className="mt-3">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-[10px] border border-[var(--accent-border)] bg-[var(--accent-surface)] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--accent-strong)]">
+            branch {card.branchName}
           </span>
         </div>
       )}
 
-      {/* Agent ID + timestamp */}
-      <div className="flex items-center justify-between gap-2">
-        {card.agentId ? (
-          <span className="text-xs font-mono text-[#64748b] truncate max-w-[120px]">
-            @{card.agentId}
-          </span>
-        ) : (
-          <span />
-        )}
-        <span className="text-xs font-mono text-[#475569] shrink-0">
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          {card.agentId ? (
+            <div className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+              {card.agentId}
+            </div>
+          ) : (
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+              unassigned
+            </div>
+          )}
+        </div>
+        <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
           {formatRelative(card.updatedAt)}
         </span>
       </div>
@@ -100,10 +98,10 @@ export function CardTile({ card, status, blockedCardIds }: Props) {
   );
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return `${Math.floor(diff)}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 60) return `${Math.floor(diff)}s`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86400)}d`;
 }

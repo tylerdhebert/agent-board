@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { Status, Workflow, WorkflowStatus } from "../../api/types";
-import { selectCls, sectionHeadingCls, primaryBtnCls } from "./adminStyles";
+import { primaryBtnCls, sectionHeadingCls, selectCls } from "./adminStyles";
 
 export function WorkflowsSection() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -21,17 +21,15 @@ export function WorkflowsSection() {
       <h3 className={sectionHeadingCls}>Workflows ({workflows.length})</h3>
 
       {workflows.length === 0 ? (
-        <p className="text-[11px] font-mono text-[#334155]">No workflows configured.</p>
+        <p className="text-[11px] font-mono text-[var(--text-dim)]">No workflows configured.</p>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-2">
           {workflows.map((workflow) => (
             <WorkflowRow
               key={workflow.id}
               workflow={workflow}
               expanded={expandedId === workflow.id}
-              onToggle={() =>
-                setExpandedId(expandedId === workflow.id ? null : workflow.id)
-              }
+              onToggle={() => setExpandedId(expandedId === workflow.id ? null : workflow.id)}
             />
           ))}
         </div>
@@ -71,17 +69,11 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
   });
 
   const sortedStatuses = [...workflowStatuses].sort((a, b) => a.position - b.position);
-
   const usedStatusIds = new Set(sortedStatuses.map((ws) => ws.statusId));
   const availableStatuses = allStatuses.filter((s) => !usedStatusIds.has(s.id));
 
   const reorderMutation = useMutation({
-    mutationFn: async ({ wsId, newPosition, swapWsId, swapPosition }: {
-      wsId: string;
-      newPosition: number;
-      swapWsId: string;
-      swapPosition: number;
-    }) => {
+    mutationFn: async ({ wsId, newPosition, swapWsId, swapPosition }: { wsId: string; newPosition: number; swapWsId: string; swapPosition: number }) => {
       await Promise.all([
         (api.api.workflows({ id: workflow.id }) as any).statuses({ wsId }).position.patch({ position: newPosition }),
         (api.api.workflows({ id: workflow.id }) as any).statuses({ wsId: swapWsId }).position.patch({ position: swapPosition }),
@@ -120,7 +112,7 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
     },
   });
 
-  const handleMoveUp = (idx: number) => {
+  function handleMoveUp(idx: number) {
     const current = sortedStatuses[idx];
     const prev = sortedStatuses[idx - 1];
     reorderMutation.mutate({
@@ -129,9 +121,9 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
       swapWsId: prev.id,
       swapPosition: current.position,
     });
-  };
+  }
 
-  const handleMoveDown = (idx: number) => {
+  function handleMoveDown(idx: number) {
     const current = sortedStatuses[idx];
     const next = sortedStatuses[idx + 1];
     reorderMutation.mutate({
@@ -140,24 +132,20 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
       swapWsId: next.id,
       swapPosition: current.position,
     });
-  };
-
-  const handleAdd = () => {
-    if (!selectedStatusId) return;
-    addMutation.mutate(selectedStatusId);
-  };
+  }
 
   return (
-    <div className="bg-[#0d0d14] border border-[#1e1e2a] rounded-sm">
+    <div className="surface-panel overflow-hidden">
       <button
+        type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-[#111118] transition-colors"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--accent-surface)]"
       >
         <svg
           width="10"
           height="10"
           viewBox="0 0 10 10"
-          className={`transition-transform duration-150 text-[#475569] shrink-0 ${expanded ? "rotate-90" : ""}`}
+          className={`shrink-0 text-[var(--text-faint)] transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
         >
           <path
             d="M3 2l4 3-4 3"
@@ -168,13 +156,13 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
             strokeLinejoin="round"
           />
         </svg>
-        <span className="flex-1 text-[12px] font-mono text-[#e2e8f0]">{workflow.name}</span>
+        <span className="flex-1 text-[12px] font-mono text-[var(--text-primary)]">{workflow.name}</span>
         <span
-          className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm border shrink-0"
+          className="rounded-full border px-2 py-1 text-[10px] font-mono shrink-0"
           style={
             workflow.type === "worktree"
-              ? { color: "#818cf8", borderColor: "#3a3a5a", backgroundColor: "#1a1a2e" }
-              : { color: "#475569", borderColor: "#2a2a38", backgroundColor: "#1a1a24" }
+              ? { color: "var(--accent-strong)", borderColor: "var(--accent-border)", backgroundColor: "var(--accent-surface)" }
+              : { color: "var(--text-faint)", borderColor: "var(--border)", backgroundColor: "var(--panel-ink)" }
           }
         >
           {workflow.type}
@@ -182,64 +170,63 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
       </button>
 
       {expanded && (
-        <div className="border-t border-[#1e1e2a] px-3 py-2 space-y-2">
+        <div className="border-t border-[var(--border-soft)] px-4 py-3">
           {isLoading ? (
-            <div className="space-y-1.5 py-1">
-              <div className="h-3 bg-[#1a1a24] rounded animate-pulse" />
-              <div className="h-3 bg-[#1a1a24] rounded animate-pulse w-4/5" />
+            <div className="space-y-2 py-1">
+              <div className="h-3 rounded-full bg-[var(--panel-hover)] animate-pulse" />
+              <div className="h-3 w-4/5 rounded-full bg-[var(--panel-hover)] animate-pulse" />
             </div>
           ) : sortedStatuses.length === 0 ? (
-            <p className="text-[11px] font-mono text-[#334155] py-1">No statuses assigned.</p>
+            <p className="py-1 text-[11px] font-mono text-[var(--text-dim)]">No statuses assigned.</p>
           ) : (
-            <div className="space-y-1 py-1">
+            <div className="space-y-2 py-1">
               {sortedStatuses.map((ws, idx) => (
                 <div
                   key={ws.id}
-                  className="flex items-center gap-2 bg-[#0a0a0f] border border-[#1e1e2a] rounded-sm px-2 py-1.5"
+                  className="flex items-center gap-2 rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-ink)] px-3 py-2"
                 >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: ws.color }}
-                  />
-                  <span className="flex-1 text-[11px] font-mono text-[#94a3b8]">
-                    {ws.name}
-                  </span>
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ws.color }} />
+                  <span className="flex-1 text-[11px] font-mono text-[var(--text-secondary)]">{ws.name}</span>
                   <button
+                    type="button"
                     onClick={() => mergeMutation.mutate({ wsId: ws.id, triggersMerge: !ws.triggersMerge })}
                     disabled={mergeMutation.isPending}
                     title="Toggle triggers merge"
-                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded-sm border transition-colors ${
+                    className={`rounded-full border px-2 py-1 text-[10px] font-mono transition-colors ${
                       ws.triggersMerge
-                        ? "text-[#4ade80] bg-[#0d2e0d] border-[#1a5c1a] hover:bg-[#162e16]"
-                        : "text-[#334155] bg-[#0a0a0f] border-[#1e1e2a] hover:border-[#2a2a38] hover:text-[#475569]"
+                        ? "border-[var(--success)] bg-[var(--success-soft)] text-[var(--success)]"
+                        : "border-[var(--border)] bg-transparent text-[var(--text-faint)] hover:text-[var(--text-primary)]"
                     }`}
                   >
                     merge
                   </button>
                   <div className="flex gap-1">
                     <button
+                      type="button"
                       onClick={() => handleMoveUp(idx)}
                       disabled={idx === 0 || reorderMutation.isPending}
-                      className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-5 text-center"
+                      className="text-[11px] font-mono text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-30"
                       title="Move up"
                     >
-                      ↑
+                      Up
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleMoveDown(idx)}
                       disabled={idx === sortedStatuses.length - 1 || reorderMutation.isPending}
-                      className="text-[11px] font-mono text-[#475569] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-5 text-center"
+                      className="text-[11px] font-mono text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-30"
                       title="Move down"
                     >
-                      ↓
+                      Down
                     </button>
                     <button
+                      type="button"
                       onClick={() => deleteMutation.mutate(ws.id)}
                       disabled={deleteMutation.isPending}
-                      className="text-[11px] font-mono text-[#475569] hover:text-[#f87171] disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-5 text-center"
+                      className="text-[11px] font-mono text-[var(--text-muted)] transition-colors hover:text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-30"
                       title="Remove from workflow"
                     >
-                      ×
+                      Remove
                     </button>
                   </div>
                 </div>
@@ -247,8 +234,7 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
             </div>
           )}
 
-          {/* Add status row */}
-          <div className="flex gap-2 items-center pt-1 border-t border-[#1e1e2a]">
+          <div className="mt-3 flex items-center gap-2 border-t border-[var(--border-soft)] pt-3">
             <select
               value={selectedStatusId}
               onChange={(e) => setSelectedStatusId(e.target.value)}
@@ -262,7 +248,8 @@ function WorkflowRow({ workflow, expanded, onToggle }: WorkflowRowProps) {
               ))}
             </select>
             <button
-              onClick={handleAdd}
+              type="button"
+              onClick={() => selectedStatusId && addMutation.mutate(selectedStatusId)}
               disabled={!selectedStatusId || addMutation.isPending}
               className={`${primaryBtnCls} shrink-0`}
             >
