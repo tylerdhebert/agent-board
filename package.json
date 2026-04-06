@@ -2,9 +2,16 @@
   "name": "agent-board",
   "version": "1.0.0",
   "private": true,
+  "bin": {
+    "agentboard": "./scripts/agentboard.ts"
+  },
   "workspaces": ["server", "client"],
   "scripts": {
-    "dev": "bun run --filter '*' dev",
+    "dev:server": "bun run --cwd server dev",
+    "dev:client": "bun run --cwd client dev",
+    "dev": "concurrently --kill-others --kill-others-on-fail \"bun run --cwd server dev\" \"bun run --cwd client dev\"",
+    "agentboard": "bun scripts/agentboard.ts",
+    "typecheck:agentboard": "bun x tsc -p scripts/tsconfig.json --noEmit",
     "build": "bun run --filter '*' build",
     "install:all": "bun install"
   },

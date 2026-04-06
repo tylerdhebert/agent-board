@@ -50,18 +50,38 @@ The database is created automatically at `data/agent-board.db` on first run. Def
 
 ## Integrating agents
 
-### Include AGENT_API.md in agent instructions
+### Include `agent/AGENT_API.md` in agent instructions
 
-`AGENT_API.md` is a concise HTTP reference written for agents. Include it in any agent's system prompt:
+`agent/AGENT_API.md` is a concise HTTP reference written for agents. Include it in any agent's system prompt:
 
 ```
 You have access to a task board at http://localhost:31377.
 See the API reference below.
 
 <agent_api>
-[contents of AGENT_API.md]
+[contents of agent/AGENT_API.md]
 </agent_api>
 ```
+
+### Reuse the agent docs with symlink scripts
+
+The reusable agent instruction docs now live in `agent/`:
+
+- `agent/AGENT_CLI.md`
+- `agent/AGENT_MANDATE.md`
+- `agent/AGENT_API.md`
+
+To symlink those three files into another directory, run one of:
+
+```bash
+bash agent/scripts/link-agent-docs.sh /path/to/destination
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\agent\scripts\link-agent-docs.ps1 -Destination C:\path\to\destination
+```
+
+On Windows, creating file symlinks may require an elevated shell or Developer Mode.
 
 ### Claude Code agents — slash command skills
 
@@ -204,8 +224,13 @@ agent-board/
 │       └── types.ts                 # Shared TypeScript types (imports WorkflowType from @server)
 │
 ├── data/                    # SQLite database (gitignored)
-├── AGENT_API.md             # HTTP reference for agents
-├── AGENT_MANDATE.md         # Mandatory protocol for agents (include in system prompts)
+├── agent/
+│   ├── AGENT_API.md         # HTTP reference for agents
+│   ├── AGENT_CLI.md         # CLI guide for agents
+│   ├── AGENT_MANDATE.md     # Mandatory protocol for agents
+│   └── scripts/
+│       ├── link-agent-docs.ps1
+│       └── link-agent-docs.sh
 └── CLAUDE.md                # Guidance for Claude Code
 ```
 

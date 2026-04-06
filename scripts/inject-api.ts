@@ -3,7 +3,7 @@
 /**
  * inject-api.ts
  *
- * Interpolates AGENT_API.md into agent files that contain the placeholder:
+ * Interpolates agent/AGENT_API.md into agent files that contain the placeholder:
  *   <agent-board-api></agent-board-api>
  *
  * Usage:
@@ -20,7 +20,7 @@ const PLACEHOLDER = /<agent-board-api>[\s\S]*?<\/agent-board-api>/;
 const OPEN_TAG = "<agent-board-api>";
 const CLOSE_TAG = "</agent-board-api>";
 
-const apiMdPath = join(dirname(import.meta.path), "..", "AGENT_API.md");
+const apiMdPath = join(dirname(import.meta.path), "..", "agent", "AGENT_API.md");
 const apiContent = readFileSync(apiMdPath, "utf8").trimEnd();
 
 function processFile(filePath: string) {

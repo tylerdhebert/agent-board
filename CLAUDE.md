@@ -107,4 +107,4 @@ No migration runner — new columns added to `CREATE TABLE IF NOT EXISTS` direct
 - Shortcut strings use the format `ctrl+,`, `escape`, `[` — built by `eventToKey()` in `useKeyboardShortcuts.ts`
 - Never add `Co-Authored-By` trailers to commits
 - Never commit without checking with the user first
-- `AGENT_API.md` — full REST API reference for agents; `AGENT_MANDATE.md` — mandatory usage directive for agents (include in agent system prompts)
+- `agent/AGENT_API.md` — full REST API reference for agents; `agent/AGENT_MANDATE.md` — mandatory usage directive for agents (include in agent system prompts)
