@@ -8,7 +8,9 @@ if (typeof window !== "undefined") {
   const savedTheme = window.localStorage.getItem("agent-board-theme") ?? "default";
   document.documentElement.dataset.theme = savedTheme;
   document.documentElement.style.colorScheme =
-    savedTheme === "light" || savedTheme === "summer" ? "light" : "dark";
+    savedTheme === "light" || savedTheme === "summer" || savedTheme === "wildflower" || savedTheme === "wa"
+      ? "light"
+      : "dark";
 }
 
 const queryClient = new QueryClient({

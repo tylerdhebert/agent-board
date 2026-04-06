@@ -80,7 +80,9 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme =
-      theme === "light" || theme === "summer" ? "light" : "dark";
+      theme === "light" || theme === "summer" || theme === "wildflower" || theme === "wa"
+        ? "light"
+        : "dark";
   }, [theme]);
 
   return (

@@ -3,13 +3,17 @@ import { useBoardStore, type AppTheme } from "../store";
 import { useShortcutHint } from "../hooks/useShortcutHint";
 import { ShortcutBadge } from "./ShortcutBadge";
 
-const themeOrder: AppTheme[] = ["default", "light", "summer", "grass"];
+const themeOrder: AppTheme[] = ["default", "night", "light", "summer", "winter", "grass", "wildflower", "wa"];
 
 const themeLabels: Record<AppTheme, string> = {
-  default: "Night",
+  default: "Choco",
+  night: "Night",
   light: "Light",
   summer: "Summer",
+  winter: "Winter",
   grass: "Grass",
+  wildflower: "Wildflower",
+  wa: "W.A.",
 };
 
 export function Header() {

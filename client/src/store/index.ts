@@ -3,7 +3,15 @@ import type { InputRequest } from "../api/types";
 
 type ModalType = "card" | "input" | null;
 type WsStatus = "connecting" | "connected" | "disconnected";
-export type AppTheme = "default" | "light" | "summer" | "grass";
+export type AppTheme =
+  | "default"
+  | "night"
+  | "light"
+  | "summer"
+  | "winter"
+  | "grass"
+  | "wildflower"
+  | "wa";
 
 const THEME_STORAGE_KEY = "agent-board-theme";
 
@@ -13,9 +21,13 @@ function getInitialTheme(): AppTheme {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (
     stored === "default"
+    || stored === "night"
     || stored === "light"
     || stored === "summer"
+    || stored === "winter"
     || stored === "grass"
+    || stored === "wildflower"
+    || stored === "wa"
   ) {
     return stored;
   }

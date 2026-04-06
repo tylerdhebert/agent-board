@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useBoardStore } from "../store";
 import { api } from "../api/client";
@@ -7,6 +8,7 @@ import { EpicPicker } from "./EpicPicker";
 import { BaseBranchPanel } from "./BaseBranchPanel";
 
 export function Board() {
+  const laneScrollerRef = useRef<HTMLDivElement>(null);
   const selectedEpicId = useBoardStore((s) => s.selectedEpicId);
   const setSelectedEpicId = useBoardStore((s) => s.setSelectedEpicId);
   const setHierarchyFilter = useBoardStore((s) => s.setHierarchyFilter);
@@ -121,6 +123,19 @@ export function Board() {
     ? selectedEpic.description
     : "Track execution across statuses, surface blockers early, and keep the current epic legible at a glance.";
 
+  const handleLaneWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    const container = laneScrollerRef.current;
+    if (!container) return;
+
+    const canScrollHorizontally = container.scrollWidth > container.clientWidth;
+    if (!canScrollHorizontally) return;
+
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+
+    event.preventDefault();
+    container.scrollLeft += event.deltaY;
+  };
+
   return (
     <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4 md:p-6">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -168,7 +183,11 @@ export function Board() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden pb-2 pr-1">
+        <div
+          ref={laneScrollerRef}
+          onWheel={handleLaneWheel}
+          className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden pb-2 pr-1"
+        >
           {workflowStatuses.length === 0 && !workflowId && (
             <div className="surface-panel surface-panel--soft flex flex-1 items-center justify-center px-4 py-10">
               <span className="text-xs font-mono text-[var(--text-faint)]">
