@@ -42,3 +42,7 @@ agent-client/MIGRATION.md
 
 # playwright
 .playwright-mcp
+
+docs/*
+docs/**/*
+docs/*/**
