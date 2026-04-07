@@ -58,13 +58,9 @@ export async function resolveCardRecord(state: CommandState, value: string) {
 }
 
 export async function resolveCardId(state: CommandState, explicit?: string) {
-  const candidate =
-    explicit
-    ?? state.global.card
-    ?? process.env.AGENT_BOARD_CARD_ID
-    ?? state.storedContext?.cardId;
+  const candidate = explicit;
   if (!candidate) {
-    throw new CliError("No card specified. Pass --card, use a positional card argument, or set context.");
+    throw new CliError("No card specified. Pass --card or use a positional card argument.");
   }
   return (await resolveCardRecord(state, candidate)).id;
 }
@@ -80,13 +76,9 @@ export async function resolveWorkflowId(state: CommandState, value: string) {
 }
 
 export function resolveAgentId(state: CommandState, explicit?: string, required = true) {
-  const agentId =
-    explicit
-    ?? state.global.agent
-    ?? process.env.AGENT_BOARD_AGENT_ID
-    ?? state.storedContext?.agentId;
+  const agentId = explicit;
   if (!agentId && required) {
-    throw new CliError("No agent id specified. Pass --agent or set context.");
+    throw new CliError("No agent id specified. Pass --agent explicitly.");
   }
   return agentId ?? null;
 }

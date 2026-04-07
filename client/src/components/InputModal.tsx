@@ -64,8 +64,11 @@ export function InputModal({ request }: Props) {
     progressPct > 50 ? "var(--success)" : progressPct > 20 ? "var(--warning)" : "var(--danger)";
 
   return (
-    <ModalOverlay onClose={handleClose} className="flex max-w-3xl flex-col overflow-hidden">
-      <div className="flex flex-col overflow-hidden rounded-[24px]">
+    <ModalOverlay
+      onClose={handleClose}
+      className="flex max-h-[min(92vh,60rem)] max-w-3xl flex-col overflow-hidden"
+    >
+      <div className="flex min-h-0 flex-col overflow-hidden rounded-[24px]">
         <div className="h-1.5 bg-[var(--panel-ink)]">
           <div
             className="h-full transition-all duration-1000 ease-linear"
@@ -98,7 +101,7 @@ export function InputModal({ request }: Props) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-5">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-5 p-5">
           {timedOut ? (
             <div className="surface-panel px-5 py-8 text-center">
               <div className="meta-label mb-3">Request Closed</div>
@@ -113,7 +116,7 @@ export function InputModal({ request }: Props) {
             </div>
           ) : (
             <>
-              <div className="grid gap-4">
+              <div className="grid min-h-0 gap-4 overflow-y-auto pr-1">
                 {request.questions.map((question, idx) => (
                   <QuestionField
                     key={question.id}

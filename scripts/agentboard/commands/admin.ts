@@ -3,6 +3,7 @@ import { CliError } from "../core/errors";
 import { buildGeneratedBranchName, normalizeString, toQueryString } from "../core/helpers";
 import {
   getCard,
+  loadCards,
   loadEpics,
   loadFeatures,
   resolveCardId,
@@ -141,11 +142,26 @@ export async function handleFeature(state: CommandState, args: string[]) {
 
   switch (action) {
     case "list": {
-      const parsed = parseFlags(rest, { epic: { type: "string" } });
+      const parsed = parseFlags(rest, {
+        epic: { type: "string" },
+        agent: { type: "string" },
+      });
       const features = await state.client.request<Feature[]>("GET", "/features");
-      if (typeof parsed.values.epic !== "string") return features;
-      const epicId = await resolveEpicId(state, parsed.values.epic);
-      return features.filter((feature) => feature.epicId === epicId);
+      const epicId =
+        typeof parsed.values.epic === "string"
+          ? await resolveEpicId(state, parsed.values.epic)
+          : undefined;
+      const agentId =
+        typeof parsed.values.agent === "string"
+          ? resolveAgentId(state, parsed.values.agent, true)
+          : null;
+      const cards = agentId ? await loadCards(state) : null;
+
+      return features.filter((feature) => {
+        if (epicId && feature.epicId !== epicId) return false;
+        if (!agentId || !cards) return true;
+        return cards.some((card) => card.featureId === feature.id && card.agentId === agentId);
+      });
     }
     case "create": {
       const parsed = parseFlags(rest, {

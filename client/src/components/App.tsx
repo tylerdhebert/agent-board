@@ -62,14 +62,19 @@ export function App() {
       const { data } = await api.api.input.pending.get();
       const requests: InputRequest[] = (data as InputRequest[]) ?? [];
       const store = useBoardStore.getState();
-      for (const req of requests) {
-        store.addPendingInputRequest(req);
-        store.addPulsingCard(req.cardId);
+      store.setPendingInputRequests(requests);
+      const activeRequestId = store.activeInputRequestId;
+      if (activeRequestId && !requests.some((req) => req.id === activeRequestId)) {
+        store.setActiveInputRequestId(null);
+        if (store.openModal === "input") {
+          store.setOpenModal(null);
+        }
       }
       return requests;
     },
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
+    staleTime: 1_000,
+    refetchInterval: 1_000,
+    refetchOnWindowFocus: true,
   });
 
   const pendingList = Array.from(pendingInputRequests.values());

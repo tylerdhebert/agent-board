@@ -142,11 +142,8 @@ export function parseFlags(args: string[], spec: Record<string, OptionSpec>): Pa
 export function extractLeadingGlobalArgs(args: string[]): { globalArgs: string[]; remaining: string[] } {
   const spec: Record<string, OptionSpec> = {
     url: { type: "string" },
-    agent: { type: "string" },
-    card: { type: "string" },
     json: { type: "boolean" },
     help: { type: "boolean", alias: ["h"] },
-    noContext: { type: "boolean" },
   };
 
   const aliasMap = new Map<string, string>();

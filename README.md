@@ -106,9 +106,20 @@ On Windows, creating file symlinks may require an elevated shell or Developer Mo
 
 ## Requesting user input
 
-When an agent hits a decision it can't make alone, it calls `POST /api/input` with a list of questions. The HTTP request **blocks** — it stays open until you answer in the UI. The card moves to Blocked automatically while waiting.
+When an agent hits a decision it can't make alone, it calls `POST /api/input` with a list of questions. The raw HTTP request **blocks** by default — it stays open until you answer in the UI. The card moves to Blocked automatically while waiting.
 
 The UI surfaces an audio alert and a floating notification. You click it, answer the questions, and the agent's execution resumes with your answers immediately.
+
+The repo CLI also supports a resilient blocking workflow for terminal agents:
+
+```bash
+agentboard input request --card <card-id> --prompt "Proceed?" --type yesno
+agentboard input list --status pending --card <card-id>
+agentboard input get <request-id>
+agentboard input wait <request-id>
+```
+
+`input request` now creates the request first and then waits by request id with a 5-second heartbeat, so terminal agents can often keep the same turn alive while still having a recovery path if the runtime interrupts the wait. Agents are expected to wait for an answer or for timeout after issuing the request. Use `--heartbeat 0` if a shell job or wrapper needs a quiet wait.
 
 ---
 

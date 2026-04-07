@@ -1,5 +1,4 @@
 import { boolValue, parseFlags, requireString } from "../core/args";
-import { updateStoredContext } from "../core/context";
 import { CliError } from "../core/errors";
 import { toQueryString } from "../core/helpers";
 import {
@@ -45,7 +44,7 @@ export async function handleCard(state: CommandState, args: string[]) {
         })}`
       );
       const agentFilter = boolValue(parsed.values, "mine")
-        ? resolveAgentId(state, undefined, true)
+        ? resolveAgentId(state, parsed.values.agent as string | undefined, true)
         : (parsed.values.agent as string | undefined);
       const featureId =
         typeof parsed.values.feature === "string"
@@ -77,13 +76,15 @@ export async function handleCard(state: CommandState, args: string[]) {
         description: { type: "string" },
         agent: { type: "string" },
         claim: { type: "boolean" },
-        use: { type: "boolean" },
         plan: { type: "string" },
         noAutoAdvance: { type: "boolean" },
       });
       const featureId = await resolveFeatureId(state, requireString(parsed.values, "feature"));
       const statusId = await resolveStatusId(state, (parsed.values.status as string | undefined) ?? "To Do");
-      const explicitAgentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
+      const explicitAgentId =
+        typeof parsed.values.agent === "string"
+          ? resolveAgentId(state, parsed.values.agent as string, false)
+          : null;
       let card = await state.client.request<Card>("POST", "/cards", {
         title: requireString(parsed.values, "title"),
         featureId,
@@ -105,18 +106,6 @@ export async function handleCard(state: CommandState, args: string[]) {
         await postAgentComment(state, card.id, parsed.values.plan);
       }
 
-      if (boolValue(parsed.values, "use") || boolValue(parsed.values, "claim")) {
-        updateStoredContext(
-          state.cwdKey,
-          {
-            url: state.client.baseUrl,
-            agentId: resolveAgentId(state, parsed.values.agent as string | undefined, false) ?? undefined,
-            cardId: card.id,
-          },
-          !state.global.noContext
-        );
-      }
-
       return card;
     }
     case "claim": {
@@ -134,7 +123,6 @@ export async function handleCard(state: CommandState, args: string[]) {
         agentId,
         autoAdvance: !boolValue(parsed.values, "noAutoAdvance"),
       });
-      updateStoredContext(state.cwdKey, { url: state.client.baseUrl, agentId, cardId }, !state.global.noContext);
       return claimed;
     }
     case "allowed": {
@@ -224,15 +212,17 @@ export async function handleCard(state: CommandState, args: string[]) {
       const parsed = parseFlags(rest, {
         card: { type: "string" },
         body: { type: "string" },
+        agent: { type: "string" },
         author: { type: "string" },
       });
       const cardId = await resolveCardId(
         state,
         (parsed.values.card as string | undefined) ?? parsed.positionals[0]
       );
+      const explicitAgentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
       const author =
         (parsed.values.author as string | undefined)
-        ?? (resolveAgentId(state, undefined, false) ? "agent" : "user");
+        ?? (explicitAgentId ? "agent" : "user");
       if (author !== "agent" && author !== "user") {
         throw new CliError('Card comments only support authors "agent" and "user"');
       }

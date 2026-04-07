@@ -60,6 +60,18 @@ export interface Question {
   options?: string[];
 }
 
+export interface InputRequestRecord {
+  id: string;
+  cardId: string;
+  previousStatusId: string | null;
+  questions: Question[];
+  answers: Record<string, string> | null;
+  status: "pending" | "answered" | "timed_out";
+  requestedAt: string;
+  answeredAt: string | null;
+  timeoutSecs: number;
+}
+
 export interface Card {
   id: string;
   featureId: string | null;
@@ -228,6 +240,10 @@ async function fetchJson<T>(
     throw new Error(`agent-board API error ${res.status}: ${body}`);
   }
   return res.json() as Promise<T>;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function resolveStatusId(nameOrId: string): Promise<string> {
@@ -590,14 +606,8 @@ export async function requestInput(
   questions: Question[],
   timeoutSecs = 900
 ): Promise<Record<string, string>> {
-  const result = await fetchJson<{
-    requestId: string;
-    status: "answered" | "timed_out";
-    answers: Record<string, string> | null;
-  }>("/api/input", {
-    method: "POST",
-    body: JSON.stringify({ cardId, questions, timeoutSecs }),
-  });
+  const request = await createInputRequest(cardId, questions, timeoutSecs);
+  const result = await waitForInputRequest(request.id, timeoutSecs);
 
   if (result.status === "timed_out" || !result.answers) {
     throw new Error(
@@ -606,6 +616,61 @@ export async function requestInput(
   }
 
   return result.answers;
+}
+
+export async function createInputRequest(
+  cardId: string,
+  questions: Question[],
+  timeoutSecs = 900
+): Promise<InputRequestRecord> {
+  return fetchJson<InputRequestRecord>("/api/input", {
+    method: "POST",
+    body: JSON.stringify({ cardId, questions, timeoutSecs, detach: true }),
+  });
+}
+
+export async function getInputRequest(requestId: string): Promise<InputRequestRecord> {
+  return fetchJson<InputRequestRecord>(`/api/input/${requestId}`);
+}
+
+export async function waitForInputRequest(
+  requestId: string,
+  timeoutSecs?: number,
+  pollIntervalSecs = 2
+): Promise<{
+  requestId: string;
+  status: "answered" | "timed_out";
+  answers: Record<string, string> | null;
+}> {
+  const startedAt = Date.now();
+  const deadlineAt =
+    typeof timeoutSecs === "number" ? startedAt + (timeoutSecs * 1000) : null;
+
+  for (;;) {
+    if (deadlineAt !== null && Date.now() > deadlineAt) {
+      throw new Error(`agent-board: timed out waiting for input request ${requestId} after ${timeoutSecs}s`);
+    }
+
+    const request = await getInputRequest(requestId);
+    if (request.status === "answered" || request.status === "timed_out") {
+      return {
+        requestId,
+        status: request.status,
+        answers: request.answers,
+      };
+    }
+    await sleep(pollIntervalSecs * 1000);
+  }
+}
+
+export async function listInputRequests(
+  opts: { status?: "pending" | "answered" | "timed_out"; cardId?: string } = {}
+): Promise<InputRequestRecord[]> {
+  const params = new URLSearchParams();
+  if (opts.status) params.set("status", opts.status);
+  if (opts.cardId) params.set("cardId", opts.cardId);
+  const query = params.toString();
+  return fetchJson<InputRequestRecord[]>(`/api/input${query ? `?${query}` : ""}`);
 }
 
 // ---------------------------------------------------------------------------

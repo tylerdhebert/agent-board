@@ -1,9 +1,9 @@
 import { helpText } from "./help";
 import { handleCard, handleDependencies } from "./commands/cards";
 import { handleInput, handleQueue } from "./commands/communication";
-import { handleContext, handleHealth, handleRaw } from "./commands/core";
+import { handleHealth, handleRaw } from "./commands/core";
 import { handleEpic, handleFeature, handleRepo, handleRule, handleStatus, handleWorkflow, handleWorktree } from "./commands/admin";
-import { handleBootstrap, handleCheckpoint, handleFinish, handleStart } from "./commands/taskflow";
+import { handleBootstrap, handleCheckpoint, handleFinish, handlePlan, handleStart } from "./commands/taskflow";
 import { CliError } from "./core/errors";
 import type { CommandState } from "./core/types";
 
@@ -19,13 +19,10 @@ export async function runCommand(state: CommandState, args: string[]) {
       return handleHealth(state);
     case "raw":
       return handleRaw(state, rest);
-    case "session":
-    case "context":
-      return handleContext(state, rest);
     case "start":
       return handleStart(state, rest);
     case "plan":
-      return handleCheckpoint(state, ["--body", rest.join(" ")]);
+      return handlePlan(state, rest);
     case "checkpoint":
       return handleCheckpoint(state, rest);
     case "finish":

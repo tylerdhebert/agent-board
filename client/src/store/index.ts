@@ -60,6 +60,7 @@ interface BoardStore {
   // Pending input requests map: requestId -> InputRequest
   pendingInputRequests: Map<string, InputRequest>;
   addPendingInputRequest: (req: InputRequest) => void;
+  setPendingInputRequests: (requests: InputRequest[]) => void;
   removePendingInputRequest: (id: string) => void;
 
   // WebSocket connection status
@@ -130,6 +131,11 @@ export const useBoardStore = create<BoardStore>((set) => ({
       next.set(req.id, req);
       return { pendingInputRequests: next };
     }),
+  setPendingInputRequests: (requests) =>
+    set(() => ({
+      pendingInputRequests: new Map(requests.map((req) => [req.id, req])),
+      pulsingCardIds: new Set(requests.map((req) => req.cardId)),
+    })),
   removePendingInputRequest: (id) =>
     set((state) => {
       const next = new Map(state.pendingInputRequests);

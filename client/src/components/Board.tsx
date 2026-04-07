@@ -131,6 +131,7 @@ export function Board() {
     if (!canScrollHorizontally) return;
 
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    if (shouldPreserveVerticalScroll(event.target, container, event.deltaY)) return;
 
     event.preventDefault();
     container.scrollLeft += event.deltaY;
@@ -212,6 +213,34 @@ export function Board() {
       {isWorktree && <BaseBranchPanel epicId={selectedEpicId} />}
     </div>
   );
+}
+
+function shouldPreserveVerticalScroll(
+  target: EventTarget | null,
+  container: HTMLDivElement,
+  deltaY: number
+) {
+  let node = target instanceof HTMLElement ? target : null;
+
+  while (node && node !== container) {
+    const canScrollVertically = node.scrollHeight > node.clientHeight;
+    if (canScrollVertically) {
+      const styles = window.getComputedStyle(node);
+      const overflowY = styles.overflowY;
+      const allowsVerticalScroll = overflowY === "auto" || overflowY === "scroll";
+      if (allowsVerticalScroll) {
+        const scrollingDown = deltaY > 0;
+        const canScrollDown = node.scrollTop + node.clientHeight < node.scrollHeight;
+        const canScrollUp = node.scrollTop > 0;
+        if ((scrollingDown && canScrollDown) || (!scrollingDown && canScrollUp)) {
+          return true;
+        }
+      }
+    }
+    node = node.parentElement;
+  }
+
+  return false;
 }
 
 function MetricPill({ label, value }: { label: string; value: string }) {

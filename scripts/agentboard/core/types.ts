@@ -13,25 +13,10 @@ export interface ParsedArgs {
   positionals: string[];
 }
 
-export interface StoredContextRecord {
-  url?: string;
-  agentId?: string;
-  cardId?: string;
-  updatedAt: string;
-}
-
-export interface StoredContextFile {
-  version: 1;
-  contexts: Record<string, StoredContextRecord>;
-}
-
 export interface GlobalOptions {
   url?: string;
-  agent?: string;
-  card?: string;
   json?: boolean;
   help?: boolean;
-  noContext?: boolean;
 }
 
 export interface Status {
@@ -115,11 +100,21 @@ export interface InputQuestion {
   options?: string[];
 }
 
+export interface InputRequestRecord {
+  id: string;
+  cardId: string;
+  previousStatusId?: string | null;
+  questions: InputQuestion[];
+  answers?: Record<string, string> | null;
+  status: "pending" | "answered" | "timed_out";
+  requestedAt: string;
+  answeredAt?: string | null;
+  timeoutSecs: number;
+}
+
 export interface CommandState {
   client: AgentBoardClient;
   global: GlobalOptions;
-  cwdKey: string;
-  storedContext: StoredContextRecord | null;
   cache: {
     statuses?: Status[];
     epics?: Epic[];

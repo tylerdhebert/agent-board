@@ -26,7 +26,7 @@ Use the CLI by default. The CLI workflow is defined in `AGENT_CLI.md`. Raw HTTP 
 1. Check your queue:
 
 ```bash
-agentboard inbox
+agentboard inbox --agent <agent-id>
 ```
 
 2. Resume an existing card:
@@ -46,7 +46,7 @@ agentboard bootstrap --epic "..." --feature "..." --title "..." --agent <agent-i
 - Use `cards create` only when the epic and feature already exist.
 
 ```bash
-agentboard cards create --feature "Existing Feature" --title "..." --claim --use --agent <agent-id>
+agentboard cards create --feature "Existing Feature" --title "..." --claim --agent <agent-id>
 ```
 
 ### During work
@@ -54,19 +54,19 @@ agentboard cards create --feature "Existing Feature" --title "..." --claim --use
 - Post a plan before non-trivial execution:
 
 ```bash
-agentboard plan "Investigate, implement, verify, then hand off."
+agentboard plan --card <card-id> "Investigate, implement, verify, then hand off."
 ```
 
 - Post checkpoint comments at meaningful milestones on the active card:
 
 ```bash
-agentboard cards comment --body "Parser is fixed; running verification now."
+agentboard cards comment --card <card-id> --agent <agent-id> --body "Parser is fixed; running verification now."
 ```
 
 - Move the active card through statuses truthfully:
 
 ```bash
-agentboard cards move --status "In Review"
+agentboard cards move --card <card-id> --agent <agent-id> --status "In Review"
 ```
 
 - Declare blockers explicitly:
@@ -78,19 +78,19 @@ agentboard dep add --card <blocked-card-id> --blocker <blocker-card-id>
 - Request human decisions through the input system for the active card:
 
 ```bash
-agentboard input request --prompt "Should I overwrite the config?" --type yesno
+agentboard input request --card <card-id> --prompt "Should I overwrite the config?" --type yesno
 ```
 
 - Use queue messages for direct person-to-person or agent-to-agent communication:
 
 ```bash
-agentboard queue reply "I am blocked on the schema decision."
+agentboard queue reply --agent <agent-id> "I am blocked on the schema decision."
 ```
 
 - If branch or worktree state matters, create or resume it through the board:
 
 ```bash
-agentboard worktree create --repo agent-board
+agentboard worktree create --card <card-id> --repo agent-board
 ```
 
 ### End of turn
@@ -98,13 +98,13 @@ agentboard worktree create --repo agent-board
 - Check the queue again:
 
 ```bash
-agentboard inbox
+agentboard inbox --agent <agent-id>
 ```
 
 - Finish the card truthfully:
 
 ```bash
-agentboard finish --summary "What changed and how it was verified."
+agentboard finish --agent <agent-id> --card <card-id> --summary "What changed and how it was verified."
 ```
 
 `finish` should leave the card in a truthful handoff state:
@@ -115,8 +115,8 @@ agentboard finish --summary "What changed and how it was verified."
 If you resolved conflicts manually, clear stale conflict state before handoff:
 
 ```bash
-agentboard cards update --clear-conflict
-agentboard cards recheck-conflicts
+agentboard cards update --card <card-id> --clear-conflict
+agentboard cards recheck-conflicts <card-id>
 ```
 
 ## Communication rules
@@ -125,6 +125,7 @@ agentboard cards recheck-conflicts
 - Use queue threads for direct conversation.
 - Use card comments for progress narration tied to a task.
 - Use `input request` when the blocker is a decision, approval, or missing human input.
+- After issuing `input request`, you must wait for an answer or for the request to time out. No exceptions.
 - Do not bury blockers in free-text commentary while leaving the card in `In Progress`.
 
 ## Worktree and branch rules
@@ -134,18 +135,12 @@ agentboard cards recheck-conflicts
 - Do not run `cards merge` unless you are explicitly performing merge duty.
 - If the server marks a card as conflicted, resolve the branch, then clear and re-check conflict state before moving forward.
 
-## Session discipline
+## Explicit CLI discipline
 
-The CLI stores session context in `~/.agentboard/context.json`.
-
-- `start` updates the active agent and card for the current repository directory.
-- Do not assume the saved session is correct after switching tasks; run `start` again.
-- If needed, adjust it manually:
-
-```bash
-agentboard session set --agent <agent-id> --card <card-id>
-agentboard session clear --card
-```
+- There is no saved CLI session or per-repo context.
+- There is no implicit agent/card environment fallback either.
+- Pass `--agent` and `--card` explicitly on the command that needs them.
+- If a waiting turn is interrupted, recover with `agentboard input wait <request-id>` or inspect pending requests with `agentboard input list`.
 
 ## Non-negotiable failures
 
@@ -159,4 +154,3 @@ These are protocol violations:
 - leaving a branch-backed card in a misleading non-handoff state
 
 If the CLI is unavailable, follow the same behavior through the raw API in `AGENT_API.md`.
-

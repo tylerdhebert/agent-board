@@ -4,10 +4,6 @@ function section(title: string, body: string) {
   return `${title}\n${body}`;
 }
 
-function isHelpToken(value: string | undefined) {
-  return value === undefined || value === "help" || value === "--help" || value === "-h";
-}
-
 export function wantsScopedHelp(args: string[]) {
   return args.length === 0 || args[0] === "help" || args.includes("--help") || args.includes("-h");
 }
@@ -19,20 +15,17 @@ CLI-first interface for the running agent-board server.
 
 Global options:
   --url <url>       Override board URL (default: ${DEFAULT_BASE_URL})
-  --agent <id>      Default agent id for this invocation
-  --card <id>       Default card id for this invocation
-  --no-context      Ignore saved per-directory context
   --json            Reserved for machine-readable flows (objects already print as JSON)
 
 Top-level commands:
   help
   health
-  context show|set|clear
   raw <METHOD> <path> [--body-json <json> | --body-file <path>]
   start --agent <id> --card <card> [--plan "..."]
   checkpoint --body "..."
   finish [--summary "..."] [--status "Done|Ready to Merge"]
   bootstrap --epic "..." --feature "..." --title "..." [--agent <id>]
+  inbox [--agent <id>] [--status pending|read] [--all] [--mark-read]
 
 Resource commands:
   cards help
@@ -53,29 +46,16 @@ Fallback:
 }
 
 export function coreHelp(topic?: string) {
-  if (isHelpToken(topic) || topic === "context") {
-    return section(
-      "agentboard context",
-      `Usage:
-  agentboard context show
-  agentboard context set [--url <url>] [--agent <id>] [--card <id>]
-  agentboard context clear [--url] [--agent] [--card] [--all]
-
-Examples:
-  agentboard context show
-  agentboard context set --agent orchestrator
-  agentboard context clear --card`
-    );
-  }
-
   if (topic === "raw") {
     return section(
       "agentboard raw",
       `Usage:
-  agentboard raw <GET|POST|PATCH|DELETE> <path> [--body-json <json> | --body-file <path>]
+  agentboard raw <GET|POST|PATCH|DELETE> <path> [--query key=value]... [--body-json <json> | --body-file <path>]
 
 Examples:
   agentboard raw GET /health
+  agentboard raw GET /queue --query agentId=implementer-1 --query status=pending
+  agentboard raw POST /queue --body-file request.json
   agentboard raw POST /queue --body-json '{"agentId":"orchestrator","body":"Need input","author":"user"}'`
     );
   }
@@ -84,7 +64,6 @@ Examples:
     "agentboard core",
     `Commands:
   health
-  context help
   raw help`
   );
 }
@@ -97,23 +76,23 @@ export function taskflowHelp(command: "start" | "checkpoint" | "finish" | "boots
         `Usage:
   agentboard start --agent <id> --card <card> [--plan "..."] [--skip-inbox] [--no-auto-advance]
 
-Starts work on a card, claims it for the agent, optionally posts a plan, and stores local session context.`
+Starts work on a card, claims it for the agent, optionally posts a plan, and returns pending inbox messages for that agent.`
       );
     case "checkpoint":
       return section(
         "agentboard checkpoint",
         `Usage:
-  agentboard checkpoint --body "..." [--card <card>]
+  agentboard checkpoint --card <card> --body "..."
 
-Posts a progress comment on the active or specified card.`
+Posts a progress comment on the specified card.`
       );
     case "finish":
       return section(
         "agentboard finish",
         `Usage:
-  agentboard finish [--card <card>] [--agent <id>] [--summary "..."] [--status "Done"] [--no-comment]
+  agentboard finish --card <card> --agent <id> [--summary "..."] [--status "Done"] [--no-comment]
 
-Completes the active or specified card, choosing "Ready to Merge" automatically for branch-backed cards when available.`
+Completes the specified card, choosing "Ready to Merge" automatically for branch-backed cards when available.`
       );
     case "bootstrap":
       return section(
@@ -147,12 +126,12 @@ Aliases:
     `Usage:
   agentboard cards list [--status <status>] [--epic <epic>] [--feature <feature>] [--agent <id> | --mine]
   agentboard cards get <card>
-  agentboard cards create --title "..." --feature <feature> [--status <status>] [--agent <id>] [--claim] [--use]
+  agentboard cards create --title "..." --feature <feature> [--status <status>] [--agent <id>] [--claim]
   agentboard cards claim <card> [--agent <id>] [--no-auto-advance]
   agentboard cards allowed <card> [--agent <id>]
   agentboard cards move <card> --to "<status>" [--agent <id>]
   agentboard cards update <card> [--title ...] [--description ...] [--status ...] [--feature ...] [--epic ...] [--type ...]
-  agentboard cards comment <card> --body "..." [--author agent|user]
+  agentboard cards comment <card> [--agent <id>] --body "..." [--author agent|user]
   agentboard cards diff <card>
   agentboard cards merge <card> [--strategy <strategy>] [--target <branch>]
   agentboard cards recheck-conflicts <card>
@@ -167,8 +146,10 @@ export function communicationHelp(topic: "input" | "queue") {
     return section(
       "agentboard input",
       `Usage:
-  agentboard input pending
-  agentboard input request <card> --prompt "..." [--type text|yesno|choice] [--option "..."] [--default "..."] [--timeout <secs>]
+  agentboard input list [--status pending|answered|timed_out] [--card <card>]
+  agentboard input get <requestId>
+  agentboard input wait <requestId> [--timeout <secs>] [--poll-interval <secs>] [--heartbeat <secs>]
+  agentboard input request <card> --prompt "..." [--type text|yesno|choice] [--option "..."] [--default "..."] [--timeout <secs>] [--poll-interval <secs>] [--heartbeat <secs>]
   agentboard input request <card> --file questions.json
   agentboard input answer <requestId> --answers-json '{"q1":"yes"}'
   agentboard input answer <requestId> --answer q1=yes --answer q2=no`
@@ -181,7 +162,7 @@ export function communicationHelp(topic: "input" | "queue") {
   agentboard queue conversations
   agentboard queue inbox [--agent <id>] [--status pending|read] [--all] [--mark-read]
   agentboard queue send --agent <id> --body "..." [--author <id|user>]
-  agentboard queue reply "..."
+  agentboard queue reply --agent <id> "..."
   agentboard queue read <messageId>
   agentboard queue read-all [--agent <id>]
   agentboard queue delete <messageId>
@@ -215,7 +196,7 @@ export function adminHelp(topic: "status" | "epic" | "feature" | "repo" | "workf
       return section(
         "agentboard feature",
         `Usage:
-  agentboard feature list [--epic <epic>]
+  agentboard feature list [--epic <epic>] [--agent <id>]
   agentboard feature create --epic <epic> --title "..." [--description "..."] [--status <status>] [--repo <repo>] [--branch <branch>]
   agentboard feature update <feature> [--title ...] [--description ...] [--status ...] [--epic ...] [--repo ...] [--branch ...]
   agentboard feature delete <feature>
@@ -260,7 +241,7 @@ export function adminHelp(topic: "status" | "epic" | "feature" | "repo" | "workf
   agentboard worktree remove <branch> --repo <repo>
   agentboard worktree remove --card <card> --repo <repo>
 
-Branch names can be inferred from the card, feature, or stored session context when available.`
+Branch names can be inferred from the card or feature when available.`
       );
   }
 }

@@ -308,7 +308,10 @@ Notes:
 ## Input requests
 
 ```http
+GET  /input
+GET  /input?status=<pending|answered|timed_out>&cardId=<cardId>
 GET  /input/pending
+GET  /input/:id
 POST /input
 POST /input/:id/answer
 ```
@@ -327,6 +330,16 @@ POST /input
   "timeoutSecs": 900
 }
 
+POST /input
+{
+  "cardId": "card-id",
+  "questions": [
+    { "id": "q1", "type": "yesno", "prompt": "Overwrite config?" }
+  ],
+  "timeoutSecs": 900,
+  "detach": true
+}
+
 POST /input/:id/answer
 {
   "answers": {
@@ -340,6 +353,9 @@ POST /input/:id/answer
 Notes:
 
 - `POST /input` long-polls until the request is answered or times out.
+- `POST /input` with `"detach": true` creates the request and returns immediately with the saved request record.
+- `GET /input/:id` is the recovery/read path for a specific request.
+- `GET /input` lists requests and supports filtering by `status` and `cardId`.
 - If a status named exactly `Blocked` exists, the server moves the card there while the request is pending.
 - The server records `previousStatusId`.
 - On answer or timeout, the previous status is restored only if the card is still in `Blocked`.
@@ -348,6 +364,8 @@ Notes:
 ```json
 { "requestId": "request-id", "status": "timed_out", "answers": null }
 ```
+
+- Agents using the CLI should issue `input request` and then wait for an answer or a timeout. They must not continue work past the blocking decision.
 
 ## Queue and communication
 
@@ -429,6 +447,11 @@ PATCH  /workflows/:id/statuses/:wsId/merge
 PATCH  /workflows/:id/statuses/:wsId
 ```
 
+Notes:
+
+- `GET /workflows/:id/statuses` returns workflow-status rows joined with status metadata.
+- The joined status display field is `name`, not `statusName`.
+
 Bodies:
 
 ```json
@@ -476,10 +499,12 @@ Notes:
 
 These are implemented by the repo CLI, not the server itself:
 
-- per-repo session context in `~/.agentboard/context.json`
 - `start`, `finish`, `plan`, and `bootstrap`
 - inferred worktree branch names
 - single-question `input request` flags
+- `input wait`
+- `input list` / `input get`
+- `raw --query key=value`
 - `cards move` preflight validation against allowed statuses
 
 For those behaviors, see `AGENT_CLI.md`.

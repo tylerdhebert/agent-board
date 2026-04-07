@@ -1,5 +1,4 @@
 import { boolValue, parseFlags, requireString } from "../core/args";
-import { clearStoredContext, updateStoredContext } from "../core/context";
 import { normalizeString, toQueryString } from "../core/helpers";
 import {
   getCard,
@@ -48,8 +47,6 @@ export async function handleStart(state: CommandState, args: string[]) {
         `/queue${toQueryString({ agentId, status: "pending" })}`
       );
 
-  updateStoredContext(state.cwdKey, { url: state.client.baseUrl, agentId, cardId }, !state.global.noContext);
-
   return { claimed, inbox };
 }
 
@@ -64,6 +61,26 @@ export async function handleCheckpoint(state: CommandState, args: string[]) {
   });
   const cardId = await resolveCardId(state, parsed.values.card as string | undefined);
   const body = requireString(parsed.values, "body");
+  return postAgentComment(state, cardId, body);
+}
+
+export async function handlePlan(state: CommandState, args: string[]) {
+  if (wantsScopedHelp(args)) {
+    return taskflowHelp("checkpoint");
+  }
+
+  const parsed = parseFlags(args, {
+    card: { type: "string" },
+    body: { type: "string" },
+  });
+  const cardId = await resolveCardId(state, parsed.values.card as string | undefined);
+  const body =
+    typeof parsed.values.body === "string"
+      ? parsed.values.body
+      : parsed.positionals.join(" ").trim();
+  if (!body) {
+    throw new CliError('Usage: agentboard plan --card <card> "Plan text..."');
+  }
   return postAgentComment(state, cardId, body);
 }
 
@@ -106,8 +123,6 @@ export async function handleFinish(state: CommandState, args: string[]) {
     "GET",
     `/queue${toQueryString({ agentId, status: "pending" })}`
   );
-
-  clearStoredContext(state.cwdKey, ["cardId"], !state.global.noContext);
 
   return { card: updated, inbox };
 }
@@ -208,7 +223,6 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
     if (typeof parsed.values.plan === "string") {
       await postAgentComment(state, card.id, parsed.values.plan);
     }
-    updateStoredContext(state.cwdKey, { url: state.client.baseUrl, agentId, cardId: card.id }, !state.global.noContext);
   }
 
   return { epic, feature, card };

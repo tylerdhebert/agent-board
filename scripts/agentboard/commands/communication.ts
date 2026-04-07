@@ -2,8 +2,85 @@ import { boolValue, parseFlags, parseJson, readJsonFile, requireString } from ".
 import { CliError } from "../core/errors";
 import { toQueryString } from "../core/helpers";
 import { resolveAgentId, resolveCardId } from "../core/resolvers";
-import { communicationHelp } from "../help";
-import type { CommandState, InputQuestion, QueueMessage } from "../core/types";
+import { communicationHelp, wantsScopedHelp } from "../help";
+import type { CommandState, InputQuestion, InputRequestRecord, QueueMessage } from "../core/types";
+
+const DEFAULT_POLL_INTERVAL_SECS = 2;
+const DEFAULT_HEARTBEAT_SECS = 5;
+const TRANSIENT_WAIT_RETRY_SECS = 2;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatElapsed(elapsedMs: number) {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+async function waitForInputRequest(
+  state: CommandState,
+  requestId: string,
+  options?: {
+    pollIntervalSecs?: number;
+    heartbeatSecs?: number;
+    timeoutSecs?: number;
+  }
+) {
+  const pollIntervalSecs = options?.pollIntervalSecs ?? DEFAULT_POLL_INTERVAL_SECS;
+  const heartbeatSecs = options?.heartbeatSecs ?? DEFAULT_HEARTBEAT_SECS;
+  const startedAt = Date.now();
+  const deadlineAt =
+    typeof options?.timeoutSecs === "number"
+      ? startedAt + (options.timeoutSecs * 1000)
+      : null;
+  let nextHeartbeatAt =
+    heartbeatSecs > 0
+      ? startedAt + (heartbeatSecs * 1000)
+      : Number.POSITIVE_INFINITY;
+
+  for (;;) {
+    if (deadlineAt !== null && Date.now() > deadlineAt) {
+      throw new CliError(`Timed out waiting for input request "${requestId}" after ${options!.timeoutSecs}s.`);
+    }
+
+    try {
+      const request = await state.client.request<InputRequestRecord>("GET", `/input/${encodeURIComponent(requestId)}`);
+      if (request.status === "answered") {
+        if (!request.answers) {
+          throw new CliError(`Input request "${requestId}" is answered but has no answer payload.`);
+        }
+        return {
+          requestId,
+          status: request.status,
+          answers: request.answers,
+          request,
+        };
+      }
+      if (request.status === "timed_out") {
+        throw new CliError(`Input request "${requestId}" timed out after ${request.timeoutSecs}s.`);
+      }
+    } catch (error) {
+      if (error instanceof CliError) throw error;
+      console.error(
+        `[agentboard] waiting for input request ${requestId}; transient error: ${error instanceof Error ? error.message : String(error)}`
+      );
+      await sleep(TRANSIENT_WAIT_RETRY_SECS * 1000);
+      continue;
+    }
+
+    const now = Date.now();
+    if (heartbeatSecs > 0 && now >= nextHeartbeatAt) {
+      console.error(
+        `[agentboard] waiting for input request ${requestId} (${formatElapsed(now - startedAt)} elapsed)`
+      );
+      nextHeartbeatAt = now + (heartbeatSecs * 1000);
+    }
+    await sleep(pollIntervalSecs * 1000);
+  }
+}
 
 function parseQuestionsFromArgs(values: Record<string, unknown>) {
   const hasStructuredQuestions =
@@ -86,11 +163,53 @@ export async function handleInput(state: CommandState, args: string[]) {
 
   switch (action) {
     case "pending":
-      return state.client.request("GET", "/input/pending");
+      return state.client.request("GET", `/input${toQueryString({ status: "pending" })}`);
+    case "list": {
+      const parsed = parseFlags(rest, {
+        status: { type: "string" },
+        card: { type: "string" },
+      });
+      const cardId =
+        typeof parsed.values.card === "string"
+          ? await resolveCardId(state, parsed.values.card)
+          : undefined;
+      return state.client.request<InputRequestRecord[]>(
+        "GET",
+        `/input${toQueryString({
+          status: parsed.values.status as string | undefined,
+          cardId,
+        })}`
+      );
+    }
+    case "get": {
+      const requestId = rest[0];
+      if (!requestId) {
+        throw new CliError('Usage: agentboard input get <requestId>');
+      }
+      return state.client.request<InputRequestRecord>("GET", `/input/${encodeURIComponent(requestId)}`);
+    }
+    case "wait": {
+      const [requestId, ...tail] = rest;
+      if (!requestId) {
+        throw new CliError('Usage: agentboard input wait <requestId> [--timeout <secs>] [--poll-interval <secs>] [--heartbeat <secs>]');
+      }
+      const parsed = parseFlags(tail, {
+        timeout: { type: "number" },
+        pollInterval: { type: "number", default: DEFAULT_POLL_INTERVAL_SECS },
+        heartbeat: { type: "number", default: DEFAULT_HEARTBEAT_SECS },
+      });
+      return waitForInputRequest(state, requestId, {
+        timeoutSecs: parsed.values.timeout as number | undefined,
+        pollIntervalSecs: parsed.values.pollInterval as number | undefined,
+        heartbeatSecs: parsed.values.heartbeat as number | undefined,
+      });
+    }
     case "request": {
       const parsed = parseFlags(rest, {
         card: { type: "string" },
         timeout: { type: "number", default: 900 },
+        pollInterval: { type: "number", default: DEFAULT_POLL_INTERVAL_SECS },
+        heartbeat: { type: "number", default: DEFAULT_HEARTBEAT_SECS },
         file: { type: "string" },
         questionJson: { type: "string[]" },
         questionId: { type: "string" },
@@ -104,10 +223,16 @@ export async function handleInput(state: CommandState, args: string[]) {
         (parsed.values.card as string | undefined) ?? parsed.positionals[0]
       );
       const questions = parseQuestionsFromArgs(parsed.values);
-      return state.client.request("POST", "/input", {
+      const request = await state.client.request<InputRequestRecord>("POST", "/input", {
         cardId,
         questions,
         timeoutSecs: parsed.values.timeout as number,
+        detach: true,
+      });
+      return waitForInputRequest(state, request.id, {
+        timeoutSecs: parsed.values.timeout as number,
+        pollIntervalSecs: parsed.values.pollInterval as number | undefined,
+        heartbeatSecs: parsed.values.heartbeat as number | undefined,
       });
     }
     case "answer": {
@@ -131,6 +256,9 @@ export async function handleInput(state: CommandState, args: string[]) {
 export async function handleQueue(state: CommandState, args: string[]) {
   const [action, ...rest] = args;
   if (!action || action === "help" || action === "--help" || action === "-h") {
+    return communicationHelp("queue");
+  }
+  if ((action === "inbox" || action === "list") && wantsScopedHelp(rest)) {
     return communicationHelp("queue");
   }
 
@@ -161,11 +289,14 @@ export async function handleQueue(state: CommandState, args: string[]) {
       return messages;
     }
     case "reply": {
-      const body = rest.join(" ").trim();
+      const parsed = parseFlags(rest, {
+        agent: { type: "string" },
+      });
+      const body = parsed.positionals.join(" ").trim();
       if (!body) {
         throw new CliError('Usage: agentboard queue reply "Message text..."');
       }
-      const agentId = resolveAgentId(state, undefined, true)!;
+      const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
       return state.client.request("POST", "/queue", {
         agentId,
         body,

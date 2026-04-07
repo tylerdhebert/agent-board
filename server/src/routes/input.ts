@@ -1,11 +1,14 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
 import { inputRequests, cards, statuses } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
 import { pollRegistry } from "../pollRegistry";
 import { nowIso } from "../helpers/db";
+import type { InferSelectModel } from "drizzle-orm";
+
+type InputRequestRecord = InferSelectModel<typeof inputRequests>;
 
 function restorePreviousStatus(cardId: string, previousStatusId: string | null | undefined) {
   if (!previousStatusId) return;
@@ -38,42 +41,119 @@ function restorePreviousStatus(cardId: string, previousStatusId: string | null |
   }
 }
 
+function serializeInputRequest(record: typeof inputRequests.$inferSelect) {
+  return {
+    ...record,
+    questions: JSON.parse(record.questions),
+    answers: record.answers ? JSON.parse(record.answers) : null,
+  };
+}
+
+function getExpiredPendingRequests() {
+  const now = Date.now();
+  return db
+    .select()
+    .from(inputRequests)
+    .where(eq(inputRequests.status, "pending"))
+    .all()
+    .filter((request) => {
+      const expiresAt = new Date(request.requestedAt).getTime() + request.timeoutSecs * 1000;
+      return Number.isFinite(expiresAt) && expiresAt <= now;
+    });
+}
+
+function markRequestTimedOut(request: InputRequestRecord) {
+  if (request.status !== "pending") return false;
+
+  const current = db
+    .select()
+    .from(inputRequests)
+    .where(eq(inputRequests.id, request.id))
+    .get();
+
+  if (!current || current.status !== "pending") return false;
+
+  db.update(inputRequests)
+    .set({ status: "timed_out" })
+    .where(eq(inputRequests.id, request.id))
+    .run();
+
+  restorePreviousStatus(request.cardId, request.previousStatusId);
+  wsManager.broadcast("input:timed_out", { requestId: request.id, cardId: request.cardId });
+  return true;
+}
+
+function reconcileExpiredInputRequests() {
+  for (const request of getExpiredPendingRequests()) {
+    if (pollRegistry.has(request.id)) continue;
+    markRequestTimedOut(request);
+  }
+}
+
 export const inputRoutes = new Elysia({ prefix: "/input" })
-  // Get all pending input requests
+  .get("/", ({ query }) => {
+    reconcileExpiredInputRequests();
+    const conditions = [
+      query.status ? eq(inputRequests.status, query.status as "pending" | "answered" | "timed_out") : undefined,
+      query.cardId ? eq(inputRequests.cardId, query.cardId) : undefined,
+    ].filter(Boolean) as Parameters<typeof and>;
+
+    return db
+      .select()
+      .from(inputRequests)
+      .where(and(...conditions))
+      .all()
+      .map(serializeInputRequest);
+  }, {
+    query: t.Object({
+      status: t.Optional(t.String()),
+      cardId: t.Optional(t.String()),
+    }),
+  })
   .get("/pending", () => {
+    reconcileExpiredInputRequests();
     return db
       .select()
       .from(inputRequests)
       .where(eq(inputRequests.status, "pending"))
       .all()
-      .map((r) => ({
-        ...r,
-        questions: JSON.parse(r.questions),
-        answers: r.answers ? JSON.parse(r.answers) : null,
-      }));
+      .map(serializeInputRequest);
+  })
+  .get("/:id", ({ params, set }) => {
+    reconcileExpiredInputRequests();
+    const request = db
+      .select()
+      .from(inputRequests)
+      .where(eq(inputRequests.id, params.id))
+      .get();
+
+    if (!request) {
+      set.status = 404;
+      return { error: "Input request not found" };
+    }
+
+    return serializeInputRequest(request);
+  }, {
+    params: t.Object({ id: t.String() }),
   })
 
-  // Long-poll: agent POSTs questions and blocks until answered
   .post(
     "/",
     async ({ body, set }) => {
-      const { cardId, questions, timeoutSecs = 900 } = body;
+      const { cardId, questions, timeoutSecs = 900, detach = false } = body;
 
-      // Validate card exists
       const card = db.select().from(cards).where(eq(cards.id, cardId)).get();
       if (!card) {
         set.status = 404;
         return { error: "Card not found" };
       }
 
-      // Find the "Blocked" status
       const blockedStatus = db
         .select()
         .from(statuses)
         .where(eq(statuses.name, "Blocked"))
         .get();
 
-      // Save the input request
       const requestId = randomUUID();
       const now = nowIso();
       db.insert(inputRequests)
@@ -89,7 +169,6 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         })
         .run();
 
-      // Flip card status to Blocked if that status exists
       if (blockedStatus) {
         db.update(cards)
           .set({ statusId: blockedStatus.id, updatedAt: nowIso() })
@@ -103,24 +182,28 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         wsManager.broadcast("card:updated", updatedCard);
       }
 
-      // Broadcast input:requested
       const request = {
         id: requestId,
         cardId,
+        previousStatusId: card.statusId,
         questions,
+        answers: null,
         status: "pending",
         requestedAt: now,
+        answeredAt: null,
         timeoutSecs,
       };
       wsManager.broadcast("input:requested", request);
 
-      // Park the promise and wait
+      if (detach) {
+        return request;
+      }
+
       try {
         const answers = await pollRegistry.register(
           requestId,
           timeoutSecs,
           () => {
-            // On timeout: update DB
             db.update(inputRequests)
               .set({ status: "timed_out" })
               .where(eq(inputRequests.id, requestId))
@@ -158,14 +241,15 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
           })
         ),
         timeoutSecs: t.Optional(t.Number()),
+        detach: t.Optional(t.Boolean()),
       }),
     }
   )
 
-  // Answer an input request
   .post(
     "/:id/answer",
     ({ params, body, set }) => {
+      reconcileExpiredInputRequests();
       const request = db
         .select()
         .from(inputRequests)
@@ -193,7 +277,6 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
 
       restorePreviousStatus(request.cardId, request.previousStatusId);
 
-      // Resolve the waiting long-poll
       const resolved = pollRegistry.answer(params.id, body.answers);
 
       const updatedRequest = db
@@ -208,7 +291,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         answers: body.answers,
       });
 
-      return { success: true, resolved, request: updatedRequest };
+      return { success: true, resolved, request: serializeInputRequest(updatedRequest) };
     },
     {
       params: t.Object({ id: t.String() }),
