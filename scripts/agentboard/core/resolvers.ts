@@ -105,9 +105,10 @@ export async function maybeEnsureAllowedStatus(
   throw new CliError(`Agent "${agentId}" cannot move this card to "${targetStatus}". Allowed statuses: ${allowedNames}`);
 }
 
-export async function postAgentComment(state: CommandState, cardId: string, body: string) {
+export async function postAgentComment(state: CommandState, cardId: string, agentId: string, body: string) {
   return state.client.request("POST", `/cards/${encodeURIComponent(cardId)}/comments`, {
     body,
     author: "agent",
+    agentId,
   });
 }

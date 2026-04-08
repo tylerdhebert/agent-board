@@ -45,7 +45,7 @@ agentboard inbox --agent implementer-1
 Post the plan:
 
 ```bash
-agentboard plan --card <card-id> "Investigate the issue, implement the change, then verify with bun run build."
+agentboard plan --card <card-id> --agent implementer-1 "Investigate the issue, implement the change, then verify with bun run build."
 ```
 
 Update status truthfully:
@@ -87,7 +87,7 @@ Workflow helpers:
 
 ```bash
 agentboard start --agent implementer-1 --card <card-id> --plan "First pass plan..."
-agentboard checkpoint --card <card-id> --body "Build is green; moving into review cleanup."
+agentboard checkpoint --card <card-id> --agent implementer-1 --body "Build is green; moving into review cleanup."
 agentboard finish --agent implementer-1 --card <card-id> --summary "Ready for handoff."
 ```
 
@@ -150,6 +150,11 @@ agentboard cards comment <card-id> --agent implementer-1 --body "Checkpoint: mer
 agentboard cards comment <card-id> --body "Human note" --author user
 ```
 
+Audit note:
+
+- Agent-authored card comments require `--agent <id>` so the stored comment records which agent left it.
+- Human notes should use `--author user` and omit `--agent`.
+
 Branch-backed card operations:
 
 ```bash
@@ -181,6 +186,14 @@ agentboard input request --card <card-id> --prompt "Which environment?" --type c
 agentboard input request --card <card-id> --prompt "What should the endpoint be called?" --type text --default "/api/v2/users"
 ```
 
+Question-type guidance:
+
+- Use `yesno` only when the real decision is binary.
+- Use `choice` when the human should pick from a finite list you can enumerate.
+- Prefer `choice` over `text` whenever the valid answers are already known.
+- Use `text` only when the human truly needs to supply new wording or an unbounded answer.
+- Use one multi-question request when several blocking questions belong to the same pause point.
+
 Recovery flow:
 
 ```bash
@@ -203,6 +216,8 @@ Notes:
 - Set `--heartbeat 0` if you need a quiet wait in a shell job or wrapper.
 - `input wait` is the recovery primitive when a runtime interrupts the original waiting turn.
 - After issuing `input request`, the agent must wait for an answer or for the request to time out. It must not continue work past the blocking decision.
+- Sending a blocking input request and then ending the turn without waiting is incorrect, even if the request was created successfully.
+- Do not use raw or low-level detached request creation as a shortcut unless you immediately transition into waiting on that same request id.
 - If a `Blocked` status exists, the server moves the card there while the request is pending.
 - On answer or timeout, the previous status is restored if the card is still in `Blocked`.
 

@@ -37,7 +37,7 @@ export async function handleStart(state: CommandState, args: string[]) {
   });
 
   if (typeof parsed.values.plan === "string") {
-    await postAgentComment(state, cardId, parsed.values.plan);
+    await postAgentComment(state, cardId, agentId, parsed.values.plan);
   }
 
   const inbox = boolValue(parsed.values, "skipInbox")
@@ -57,11 +57,13 @@ export async function handleCheckpoint(state: CommandState, args: string[]) {
 
   const parsed = parseFlags(args, {
     card: { type: "string" },
+    agent: { type: "string" },
     body: { type: "string" },
   });
   const cardId = await resolveCardId(state, parsed.values.card as string | undefined);
+  const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
   const body = requireString(parsed.values, "body");
-  return postAgentComment(state, cardId, body);
+  return postAgentComment(state, cardId, agentId, body);
 }
 
 export async function handlePlan(state: CommandState, args: string[]) {
@@ -71,9 +73,11 @@ export async function handlePlan(state: CommandState, args: string[]) {
 
   const parsed = parseFlags(args, {
     card: { type: "string" },
+    agent: { type: "string" },
     body: { type: "string" },
   });
   const cardId = await resolveCardId(state, parsed.values.card as string | undefined);
+  const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
   const body =
     typeof parsed.values.body === "string"
       ? parsed.values.body
@@ -81,7 +85,7 @@ export async function handlePlan(state: CommandState, args: string[]) {
   if (!body) {
     throw new CliError('Usage: agentboard plan --card <card> "Plan text..."');
   }
-  return postAgentComment(state, cardId, body);
+  return postAgentComment(state, cardId, agentId, body);
 }
 
 export async function handleFinish(state: CommandState, args: string[]) {
@@ -101,7 +105,7 @@ export async function handleFinish(state: CommandState, args: string[]) {
   const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
 
   if (!boolValue(parsed.values, "noComment") && typeof parsed.values.summary === "string") {
-    await postAgentComment(state, cardId, parsed.values.summary);
+    await postAgentComment(state, cardId, agentId, parsed.values.summary);
   }
 
   const explicitStatus = parsed.values.status as string | undefined;
@@ -221,7 +225,7 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
       autoAdvance: !boolValue(parsed.values, "noAutoAdvance"),
     });
     if (typeof parsed.values.plan === "string") {
-      await postAgentComment(state, card.id, parsed.values.plan);
+      await postAgentComment(state, card.id, agentId, parsed.values.plan);
     }
   }
 

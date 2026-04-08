@@ -130,6 +130,7 @@ export const comments = sqliteTable("comments", {
   author: text("author", { enum: ["agent", "user"] })
     .notNull()
     .default("user"),
+  agentId: text("agent_id"),
   body: text("body").notNull(),
   createdAt: text("created_at")
     .notNull()

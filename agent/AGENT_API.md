@@ -233,13 +233,18 @@ POST /cards/:id/comments
 Body:
 
 ```json
-{ "body": "Checkpoint: build passed.", "author": "agent" }
+{ "body": "Checkpoint: build passed.", "author": "agent", "agentId": "implementer-1" }
 ```
 
 Allowed authors:
 
 - `agent`
 - `user`
+
+Rules:
+
+- Agent-authored comments must include `agentId`.
+- User-authored comments should use `author: "user"` and do not need `agentId`.
 
 ### Diff, merge, conflict checks
 
@@ -350,6 +355,14 @@ POST /input/:id/answer
 }
 ```
 
+Question type guidance:
+
+- Use `yesno` only for true binary decisions.
+- Use `choice` when the valid answers come from a finite list you can enumerate.
+- Prefer `choice` over `text` whenever the allowed options are already known.
+- Use `text` only when the human must provide a genuinely open-ended answer.
+- Group multiple blocking questions into one request when they belong to the same pause point.
+
 Notes:
 
 - `POST /input` long-polls until the request is answered or times out.
@@ -366,6 +379,8 @@ Notes:
 ```
 
 - Agents using the CLI should issue `input request` and then wait for an answer or a timeout. They must not continue work past the blocking decision.
+- Agents using the raw API or low-level SDK helpers must follow the same rule: creating the request is not enough. They must immediately wait on that same request id until it is answered or timed out before continuing or ending the turn.
+- Detached creation is an implementation detail for resilient waiting and recovery, not permission to fire-and-forget a blocking question.
 
 ## Queue and communication
 

@@ -313,6 +313,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                       {card?.comments.length ? (
                         card.comments.map((comment) => {
                           const isAgent = comment.author === "agent";
+                          const authorLabel = isAgent ? (comment.agentId ?? "Agent") : "User";
                           return (
                             <div
                               key={comment.id}
@@ -324,7 +325,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                             >
                               <div className="mb-2 flex flex-wrap items-center gap-2">
                                 <span className="meta-label" style={{ color: isAgent ? "var(--accent-strong)" : "var(--success)" }}>
-                                  {isAgent ? "Agent" : "User"}
+                                  {authorLabel}
                                 </span>
                                 <span className="text-[10px] font-mono text-[var(--text-faint)]">
                                   {formatTimestamp(comment.createdAt)}

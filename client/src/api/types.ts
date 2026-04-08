@@ -57,6 +57,7 @@ export interface Comment {
   id: string;
   cardId: string;
   author: "agent" | "user";
+  agentId?: string | null;
   body: string;
   createdAt: string;
 }

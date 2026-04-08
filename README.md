@@ -38,7 +38,7 @@ The database is created automatically at `data/agent-board.db` on first run. Def
 
 ### For agents
 - Create and update cards to represent their work
-- Post comments to narrate progress
+- Post attributed comments to narrate progress
 - Claim cards to take ownership and auto-advance to In Progress
 - Request user input — the HTTP call long-polls until you answer
 - Check for and reply to user messages via the queue API
@@ -119,7 +119,7 @@ agentboard input get <request-id>
 agentboard input wait <request-id>
 ```
 
-`input request` now creates the request first and then waits by request id with a 5-second heartbeat, so terminal agents can often keep the same turn alive while still having a recovery path if the runtime interrupts the wait. Agents are expected to wait for an answer or for timeout after issuing the request. Use `--heartbeat 0` if a shell job or wrapper needs a quiet wait.
+`input request` now creates the request first and then waits by request id with a 5-second heartbeat, so terminal agents can often keep the same turn alive while still having a recovery path if the runtime interrupts the wait. Agents are expected to wait for an answer or for timeout after issuing the request, and they should prefer `choice` questions whenever the valid answers can be enumerated up front instead of falling back to free text. Use `--heartbeat 0` if a shell job or wrapper needs a quiet wait.
 
 ---
 

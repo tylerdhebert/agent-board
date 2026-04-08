@@ -98,6 +98,7 @@ export interface Comment {
   id: string;
   cardId: string;
   author: "agent" | "user";
+  agentId?: string | null;
   body: string;
   createdAt: string;
 }
@@ -481,11 +482,15 @@ export async function deleteCard(id: string): Promise<void> {
 export async function addComment(
   cardId: string,
   body: string,
-  author: "agent" | "user" = "agent"
+  options: { author?: "agent" | "user"; agentId?: string } = {}
 ): Promise<Comment> {
+  const author = options.author ?? "agent";
+  if (author === "agent" && !options.agentId) {
+    throw new Error("agent-board: agent comments require agentId for auditability");
+  }
   return fetchJson<Comment>(`/api/cards/${cardId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ body, author }),
+    body: JSON.stringify({ body, author, agentId: options.agentId }),
   });
 }
 
@@ -618,6 +623,14 @@ export async function requestInput(
   return result.answers;
 }
 
+/**
+ * Low-level helper: create an input request record without waiting.
+ *
+ * Most agents should not call this directly. Prefer requestInput(), which
+ * creates the request and then waits for an answer or timeout in the same
+ * control flow. If you do call this helper, you must immediately follow it
+ * with waitForInputRequest(request.id, ...) before continuing or ending turn.
+ */
 export async function createInputRequest(
   cardId: string,
   questions: Question[],

@@ -559,10 +559,14 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .get();
       if (!card) throw new Error("Card not found");
       const id = randomUUID();
+      if (body.author === "agent" && !body.agentId) {
+        throw new Error("Agent comments require agentId");
+      }
       const row = {
         id,
         cardId: params.id,
         author: body.author,
+        agentId: body.author === "agent" ? body.agentId : null,
         body: body.body,
         createdAt: nowIso(),
       };
@@ -580,6 +584,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       body: t.Object({
         body: t.String(),
         author: t.Union([t.Literal("agent"), t.Literal("user")]),
+        agentId: t.Optional(t.String()),
       }),
     }
   )

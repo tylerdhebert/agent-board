@@ -103,7 +103,8 @@ export async function handleCard(state: CommandState, args: string[]) {
       }
 
       if (typeof parsed.values.plan === "string") {
-        await postAgentComment(state, card.id, parsed.values.plan);
+        const planAgentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
+        await postAgentComment(state, card.id, planAgentId, parsed.values.plan);
       }
 
       return card;
@@ -219,16 +220,20 @@ export async function handleCard(state: CommandState, args: string[]) {
         state,
         (parsed.values.card as string | undefined) ?? parsed.positionals[0]
       );
-      const explicitAgentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
       const author =
         (parsed.values.author as string | undefined)
-        ?? (explicitAgentId ? "agent" : "user");
+        ?? "agent";
       if (author !== "agent" && author !== "user") {
         throw new CliError('Card comments only support authors "agent" and "user"');
       }
+      const agentId =
+        author === "agent"
+          ? resolveAgentId(state, parsed.values.agent as string | undefined, true)
+          : null;
       return state.client.request("POST", `/cards/${encodeURIComponent(cardId)}/comments`, {
         body: requireString(parsed.values, "body"),
         author,
+        agentId: agentId ?? undefined,
       });
     }
     case "diff": {

@@ -81,6 +81,18 @@ agentboard dep add --card <blocked-card-id> --blocker <blocker-card-id>
 agentboard input request --card <card-id> --prompt "Should I overwrite the config?" --type yesno
 ```
 
+- Choose the narrowest question type that matches the blocker:
+  - `yesno` only for true binary decisions.
+  - `choice` when the valid answers come from a known finite list.
+  - `text` only when the answer is genuinely open-ended.
+- Prefer `choice` over `text` whenever you can enumerate the options yourself.
+- Use one multi-question request when several blocking questions belong to the same pause point.
+
+```bash
+agentboard input request --card <card-id> --prompt "Which environment?" --type choice --option staging --option production
+agentboard input request --card <card-id> --file questions.json
+```
+
 - Use queue messages for direct person-to-person or agent-to-agent communication:
 
 ```bash
@@ -126,6 +138,8 @@ agentboard cards recheck-conflicts <card-id>
 - Use card comments for progress narration tied to a task.
 - Use `input request` when the blocker is a decision, approval, or missing human input.
 - After issuing `input request`, you must wait for an answer or for the request to time out. No exceptions.
+- Creating a blocking input request and then ending the turn without waiting is a protocol violation.
+- Do not use low-level detached input creation as a fire-and-forget shortcut. If you create a request by id, you must immediately wait on that same request before continuing or ending the turn.
 - Do not bury blockers in free-text commentary while leaving the card in `In Progress`.
 
 ## Worktree and branch rules

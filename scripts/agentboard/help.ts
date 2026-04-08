@@ -22,8 +22,8 @@ Top-level commands:
   health
   raw <METHOD> <path> [--body-json <json> | --body-file <path>]
   start --agent <id> --card <card> [--plan "..."]
-  checkpoint --body "..."
-  finish [--summary "..."] [--status "Done|Ready to Merge"]
+  checkpoint --card <card> --agent <id> --body "..."
+  finish --card <card> --agent <id> [--summary "..."] [--status "Done|Ready to Merge"]
   bootstrap --epic "..." --feature "..." --title "..." [--agent <id>]
   inbox [--agent <id>] [--status pending|read] [--all] [--mark-read]
 
@@ -82,7 +82,7 @@ Starts work on a card, claims it for the agent, optionally posts a plan, and ret
       return section(
         "agentboard checkpoint",
         `Usage:
-  agentboard checkpoint --card <card> --body "..."
+  agentboard checkpoint --card <card> --agent <id> --body "..."
 
 Posts a progress comment on the specified card.`
       );
@@ -131,7 +131,7 @@ Aliases:
   agentboard cards allowed <card> [--agent <id>]
   agentboard cards move <card> --to "<status>" [--agent <id>]
   agentboard cards update <card> [--title ...] [--description ...] [--status ...] [--feature ...] [--epic ...] [--type ...]
-  agentboard cards comment <card> [--agent <id>] --body "..." [--author agent|user]
+  agentboard cards comment <card> --agent <id> --body "..." [--author agent|user]
   agentboard cards diff <card>
   agentboard cards merge <card> [--strategy <strategy>] [--target <branch>]
   agentboard cards recheck-conflicts <card>

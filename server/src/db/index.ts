@@ -115,6 +115,7 @@ export function initDb() {
       id TEXT PRIMARY KEY,
       card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
       author TEXT NOT NULL DEFAULT 'user' CHECK(author IN ('agent','user')),
+      agent_id TEXT,
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -190,6 +191,12 @@ export function initDb() {
   // Lightweight schema migration for existing databases.
   try {
     sqlite.run(`ALTER TABLE input_requests ADD COLUMN previous_status_id TEXT`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE comments ADD COLUMN agent_id TEXT`);
   } catch {
     // Column already exists.
   }
