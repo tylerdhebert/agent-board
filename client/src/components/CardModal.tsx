@@ -109,6 +109,16 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
     staleTime: 30_000,
   });
 
+  const { data: repoBranches = [] } = useQuery<string[]>({
+    queryKey: ["repo-branches", card?.repoId],
+    queryFn: async () => {
+      const { data } = await (api.api.repos({ id: card!.repoId! }) as any).branches.get();
+      return (data as { branches: string[] })?.branches ?? [];
+    },
+    enabled: !!(card?.repoId && card?.branchName),
+    staleTime: 30_000,
+  });
+
   const addBlockerMutation = useMutation({
     mutationFn: async (blockerCardId: string) => {
       const { data, error } = await (api.api.cards({ id: selectedCardId! }) as any).dependencies.post({ blockerCardId });
@@ -520,13 +530,13 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
         </div>
       </ModalOverlay>
 
-      {showDiff && card?.branchName && (
+      {showDiff && card?.branchName && card?.repoId && (
         <DiffModal
           cardId={card.id}
           cardTitle={card.title}
           branchName={card.branchName}
-          repoId={card.repoId ?? ""}
-          availableBranches={[]}
+          repoId={card.repoId}
+          availableBranches={repoBranches}
           onClose={() => setShowDiff(false)}
         />
       )}
