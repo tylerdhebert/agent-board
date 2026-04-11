@@ -1,13 +1,26 @@
 import { CliError } from "./errors";
-import type { Card } from "./types";
+import type { Card, RenderEnvelope } from "./types";
+import { renderKnown, unwrapRenderable } from "./render";
 
-export function print(value: unknown) {
+export { renderTable, formatRelative } from "./render";
+
+export function print(value: unknown, options?: { json?: boolean }) {
   if (value === undefined) return;
+  const unwrapped = unwrapRenderable(value);
+  if (options?.json) {
+    console.log(JSON.stringify(unwrapped, null, 2));
+    return;
+  }
   if (typeof value === "string") {
     console.log(value);
     return;
   }
-  console.log(JSON.stringify(value, null, 2));
+  const rendered = renderKnown(value);
+  if (rendered !== null) {
+    console.log(rendered);
+    return;
+  }
+  console.log(JSON.stringify(unwrapped, null, 2));
 }
 
 export function toQueryString(values: Record<string, string | number | boolean | undefined>) {
@@ -56,9 +69,12 @@ export function shortCardId(cardId: string) {
 }
 
 export function buildGeneratedBranchName(agentId: string | null, card: Card) {
-  const agentSegment = sanitizeBranchSegment(agentId ?? card.agentId ?? "agent").replace(/\//g, "-") || "agent";
-  const titleSegment = sanitizeBranchSegment(card.title).replace(/\//g, "-").slice(0, 40) || "task";
-  return `wt/${agentSegment}/${shortCardId(card.id)}-${titleSegment}`;
+  const agentSegment =
+    sanitizeBranchSegment(agentId ?? card.agentId ?? "agent").replace(/\//g, "-") || "agent";
+  const titleSegment =
+    sanitizeBranchSegment(card.title).replace(/\//g, "-").slice(0, 40) || "task";
+  const refSegment = sanitizeBranchSegment(card.ref ?? shortCardId(card.id));
+  return `wt/${agentSegment}/${refSegment}-${titleSegment}`;
 }
 
 export function exactMatch<T>(
@@ -74,12 +90,7 @@ export function exactMatch<T>(
       return raw ? normalizeString(raw) === needle : false;
     })
   );
-
   if (matches.length === 1) return matches[0];
-
-  if (matches.length > 1) {
-    throw new CliError(`Ambiguous ${label} "${input}". Use the id instead.`);
-  }
-
+  if (matches.length > 1) throw new CliError(`Ambiguous ${label} "${input}". Use the id instead.`);
   throw new CliError(`Unknown ${label} "${input}"`);
 }
