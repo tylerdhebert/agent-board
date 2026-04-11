@@ -210,7 +210,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       {card && <TypeBadge type={card.type} />}
                       {currentStatus && <StatusBadge status={currentStatus} />}
-                      <span className="stat-pill">{card?.id}</span>
+                      <span className="stat-pill">{card?.ref ?? card?.id}</span>
                     </div>
                     <h2 className="display-title text-4xl leading-none">{card?.title}</h2>
                   </>
@@ -247,6 +247,17 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                     </SectionCard>
                   )}
 
+                  {(card?.plan || card?.latestUpdate || card?.blockedReason || card?.handoffSummary) && (
+                    <SectionCard title="Workflow State">
+                      <div className="space-y-3">
+                        {card.plan && <WorkflowField label="Plan" value={card.plan} />}
+                        {card.latestUpdate && <WorkflowField label="Latest Update" value={card.latestUpdate} />}
+                        {card.blockedReason && <WorkflowField label="Blocked Reason" value={card.blockedReason} tone="danger" />}
+                        {card.handoffSummary && <WorkflowField label="Handoff Summary" value={card.handoffSummary} tone="success" />}
+                      </div>
+                    </SectionCard>
+                  )}
+
                   <SectionCard title={`Blockers (${deps?.blockers.length ?? 0})`}>
                     <div className="space-y-2">
                       {deps?.blockers.length ? (
@@ -261,6 +272,9 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                                 className={`h-2.5 w-2.5 shrink-0 rounded-full ${isDone ? "bg-[var(--success)]" : "bg-[var(--danger)]"}`}
                               />
                               <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-mono text-[var(--text-faint)]">
+                                  {blocker.ref ?? blocker.id}
+                                </p>
                                 <p className={`truncate text-[12px] font-semibold ${isDone ? "line-through text-[var(--text-faint)]" : "text-[var(--text-primary)]"}`}>
                                   {blocker.title}
                                 </p>
@@ -291,7 +305,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                         <option value="">Add a blocker...</option>
                         {availableBlockers.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.title}
+                            {(c.ref ?? c.id)} - {c.title}
                           </option>
                         ))}
                       </select>
@@ -364,6 +378,8 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                 <div className="space-y-5">
                   <SectionCard title="Overview">
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                      <MetaItem label="Ref" value={card?.ref ?? card?.id ?? "-"} />
+
                       <div>
                         <div className="meta-label mb-2">Status</div>
                         <select
@@ -505,7 +521,14 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
       </ModalOverlay>
 
       {showDiff && card?.branchName && (
-        <DiffModal cardId={card.id} cardTitle={card.title} branchName={card.branchName} onClose={() => setShowDiff(false)} />
+        <DiffModal
+          cardId={card.id}
+          cardTitle={card.title}
+          branchName={card.branchName}
+          repoId={card.repoId ?? ""}
+          availableBranches={[]}
+          onClose={() => setShowDiff(false)}
+        />
       )}
 
       {showConflicts && card?.conflictedAt && <ConflictDetailsModal card={card} onClose={() => setShowConflicts(false)} />}
@@ -527,6 +550,30 @@ function MetaItem({ label, value }: { label: string; value: string }) {
     <div className="rounded-[18px] border border-[var(--border-soft)] bg-[var(--panel-ink)] px-4 py-3">
       <div className="meta-label mb-2">{label}</div>
       <div className="text-sm text-[var(--text-secondary)] break-words">{value}</div>
+    </div>
+  );
+}
+
+function WorkflowField({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "danger" | "success";
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "border-red-400/30 bg-red-400/10"
+      : tone === "success"
+        ? "border-emerald-400/30 bg-emerald-400/10"
+        : "border-[var(--border-soft)] bg-[var(--panel-ink)]";
+
+  return (
+    <div className={`rounded-[18px] border px-4 py-3 ${toneClass}`}>
+      <div className="meta-label mb-2">{label}</div>
+      <p className="text-sm leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">{value}</p>
     </div>
   );
 }

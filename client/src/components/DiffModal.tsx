@@ -4,24 +4,32 @@ import { api } from "../api/client";
 import { parseDiff, type FileDiff } from "../lib/diffUtils";
 import { DiffViewer } from "./DiffViewer";
 import { ModalOverlay } from "./ui/ModalOverlay";
+import { Combobox } from "./ui/Combobox";
 
 interface DiffModalProps {
   cardId: string;
   cardTitle: string;
   branchName: string;
+  repoId: string;
+  availableBranches: string[];
   onClose: () => void;
 }
 
 interface DiffData {
   diff: string;
   stat: string;
+  baseBranch: string;
   branchName: string;
 }
 
-export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalProps) {
+export function DiffModal({ cardId, cardTitle, branchName, repoId, availableBranches, onClose }: DiffModalProps) {
+  void repoId;
   const [data, setData] = useState<DiffData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // null = let server decide (uses currently checked-out branch)
+  // string = explicit user selection
+  const [selectedBase, setSelectedBase] = useState<string | null>(null);
 
   const handleClose = useCallback(() => onClose(), [onClose]);
   useEscapeToClose(handleClose);
@@ -31,23 +39,27 @@ export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalP
     setLoading(true);
     setError(null);
 
-    api.api.cards({ id: cardId }).diff.get().then(({ data, error }) => {
+    const fetchDiff = selectedBase !== null
+      ? (api.api.cards({ id: cardId }) as any).diff.get({ query: { baseBranch: selectedBase } })
+      : api.api.cards({ id: cardId }).diff.get();
+
+    fetchDiff.then(({ data: responseData, error: responseError }: any) => {
       if (cancelled) return;
-      if (error) {
-        setError((error as any).value?.error ?? "Failed to load diff");
-        setLoading(false);
+      if (responseError) {
+        setError(responseError.value?.error ?? "Failed to load diff");
       } else {
-        setData(data as DiffData);
-        setLoading(false);
+        setData(responseData as DiffData);
       }
+      setLoading(false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [cardId]);
+  }, [cardId, selectedBase]);
 
   const files: FileDiff[] = data ? parseDiff(data.diff) : [];
+  const comboboxValue = selectedBase ?? data?.baseBranch ?? "";
 
   return (
     <ModalOverlay onClose={handleClose} className="flex h-[85vh] max-w-6xl flex-col overflow-hidden">
@@ -59,13 +71,23 @@ export function DiffModal({ cardId, cardTitle, branchName, onClose }: DiffModalP
                 <span className="section-kicker__dot" />
                 Branch Review
               </div>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="stat-pill">{branchName}</span>
                 {!loading && files.length > 0 && (
                   <span className="stat-pill">{files.length} file{files.length === 1 ? "" : "s"}</span>
                 )}
               </div>
-              <h2 className="display-title text-3xl leading-none">{cardTitle}</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-[var(--text-faint)]">diff against</span>
+                <Combobox
+                  options={availableBranches}
+                  value={comboboxValue}
+                  onChange={(branch) => setSelectedBase(branch)}
+                  placeholder="branch..."
+                  className="w-48"
+                />
+              </div>
+              <h2 className="display-title mt-3 text-3xl leading-none">{cardTitle}</h2>
             </div>
             <button
               type="button"
