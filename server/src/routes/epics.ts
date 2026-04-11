@@ -97,9 +97,7 @@ export const epicRoutes = new Elysia({ prefix: "/epics" })
         return { error: "Repo not found" };
       }
 
-      const range = repo.compareBase
-        ? `${repo.compareBase}..${repo.baseBranch}`
-        : repo.baseBranch;
+      const range = repo.baseBranch;
       const result = git(
         ["log", range, "--format=%H|%ae|%s|%ai", "-50"],
         repo.path

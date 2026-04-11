@@ -18,6 +18,35 @@ sqlite.run("PRAGMA foreign_keys = ON;");
 
 export const db = drizzle(sqlite, { schema });
 
+function nextRefNum(tableName: "cards" | "features") {
+  const row = sqlite
+    .prepare(`SELECT COALESCE(MAX(ref_num), 0) + 1 as nextRefNum FROM ${tableName}`)
+    .get() as { nextRefNum?: number } | undefined;
+  return Number(row?.nextRefNum ?? 1);
+}
+
+function backfillRefNums(tableName: "cards" | "features") {
+  const rows = sqlite
+    .prepare(`SELECT id FROM ${tableName} WHERE ref_num IS NULL ORDER BY created_at, id`)
+    .all() as Array<{ id: string }>;
+  if (rows.length === 0) return;
+
+  let next = nextRefNum(tableName);
+  const stmt = sqlite.prepare(`UPDATE ${tableName} SET ref_num = ? WHERE id = ?`);
+  for (const row of rows) {
+    stmt.run(next, row.id);
+    next += 1;
+  }
+}
+
+export function nextCardRefNum() {
+  return nextRefNum("cards");
+}
+
+export function nextFeatureRefNum() {
+  return nextRefNum("features");
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap — create tables if they don't exist
 // ---------------------------------------------------------------------------
@@ -58,7 +87,6 @@ export function initDb() {
       name TEXT NOT NULL,
       path TEXT NOT NULL,
       base_branch TEXT NOT NULL DEFAULT 'main',
-      compare_base TEXT,
       build_command TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -79,6 +107,7 @@ export function initDb() {
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS features (
       id TEXT PRIMARY KEY,
+      ref_num INTEGER NOT NULL UNIQUE,
       epic_id TEXT NOT NULL REFERENCES epics(id),
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
@@ -93,6 +122,7 @@ export function initDb() {
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS cards (
       id TEXT PRIMARY KEY,
+      ref_num INTEGER NOT NULL UNIQUE,
       feature_id TEXT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
       epic_id TEXT REFERENCES epics(id),
       repo_id TEXT REFERENCES repos(id),
@@ -101,6 +131,10 @@ export function initDb() {
       description TEXT NOT NULL DEFAULT '',
       status_id TEXT NOT NULL REFERENCES statuses(id),
       agent_id TEXT,
+      plan TEXT,
+      latest_update TEXT,
+      handoff_summary TEXT,
+      blocked_reason TEXT,
       branch_name TEXT,
       completed_at TEXT,
       conflicted_at TEXT,
@@ -132,16 +166,6 @@ export function initDb() {
       requested_at TEXT NOT NULL DEFAULT (datetime('now')),
       answered_at TEXT,
       timeout_secs INTEGER NOT NULL DEFAULT 900
-    )
-  `);
-
-  sqlite.run(`
-    CREATE TABLE IF NOT EXISTS transition_rules (
-      id TEXT PRIMARY KEY,
-      agent_pattern TEXT,
-      from_status_id TEXT REFERENCES statuses(id) ON DELETE CASCADE,
-      to_status_id TEXT NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
 
@@ -188,6 +212,8 @@ export function initDb() {
     )
   `);
 
+  sqlite.run(`DROP TABLE IF EXISTS transition_rules`);
+
   // Lightweight schema migration for existing databases.
   try {
     sqlite.run(`ALTER TABLE input_requests ADD COLUMN previous_status_id TEXT`);
@@ -200,6 +226,54 @@ export function initDb() {
   } catch {
     // Column already exists.
   }
+
+  try {
+    sqlite.run(`ALTER TABLE features ADD COLUMN ref_num INTEGER`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE cards ADD COLUMN ref_num INTEGER`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE cards ADD COLUMN plan TEXT`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE cards ADD COLUMN latest_update TEXT`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE cards ADD COLUMN handoff_summary TEXT`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE cards ADD COLUMN blocked_reason TEXT`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE repos DROP COLUMN compare_base`);
+  } catch {
+    // Column already removed or never existed.
+  }
+
+  sqlite.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_features_ref_num ON features(ref_num)`);
+  sqlite.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_ref_num ON cards(ref_num)`);
+
+  backfillRefNums("features");
+  backfillRefNums("cards");
 
   // Upsert shortcuts — INSERT OR IGNORE so existing user customizations are preserved
   const shortcutSeed = [
@@ -280,6 +354,7 @@ export function initDb() {
       [`ws-worktree-${readyStatus.id}`, worktreeWorkflowId, readyStatus.id, defaultStatusNames.length, 1, now]
     );
   }
+
 }
 
 export { sqlite };

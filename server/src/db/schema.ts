@@ -47,7 +47,6 @@ export const repos = sqliteTable("repos", {
   name: text("name").notNull(),
   path: text("path").notNull(),
   baseBranch: text("base_branch").notNull().default("main"),
-  compareBase: text("compare_base"), // branch to diff against for commit history, e.g. "main"
   buildCommand: text("build_command"), // nullable - if null, build not configured
   createdAt: text("created_at").notNull(),
 });
@@ -74,6 +73,7 @@ export const epics = sqliteTable("epics", {
 // ---------------------------------------------------------------------------
 export const features = sqliteTable("features", {
   id: text("id").primaryKey(),
+  refNum: integer("ref_num").notNull(),
   epicId: text("epic_id")
     .notNull()
     .references(() => epics.id),
@@ -95,6 +95,7 @@ export const features = sqliteTable("features", {
 // ---------------------------------------------------------------------------
 export const cards = sqliteTable("cards", {
   id: text("id").primaryKey(),
+  refNum: integer("ref_num").notNull(),
   featureId: text("feature_id").notNull().references(() => features.id, { onDelete: "cascade" }),
   epicId: text("epic_id").references(() => epics.id),
   repoId: text("repo_id").references(() => repos.id),
@@ -107,6 +108,10 @@ export const cards = sqliteTable("cards", {
     .notNull()
     .references(() => statuses.id),
   agentId: text("agent_id"),
+  plan: text("plan"),
+  latestUpdate: text("latest_update"),
+  handoffSummary: text("handoff_summary"),
+  blockedReason: text("blocked_reason"),
   branchName: text("branch_name"),
   completedAt: text("completed_at"),
   conflictedAt: text("conflicted_at"),
@@ -159,20 +164,6 @@ export const inputRequests = sqliteTable("input_requests", {
   answeredAt: text("answered_at"),
   timeoutSecs: integer("timeout_secs").notNull().default(900),
 });
-
-// ---------------------------------------------------------------------------
-// transition_rules
-// ---------------------------------------------------------------------------
-export const transitionRules = sqliteTable("transition_rules", {
-  id: text("id").primaryKey(),
-  agentPattern: text("agent_pattern"), // null = applies to all agents; can use glob-like wildcard e.g. "implementer*"
-  fromStatusId: text("from_status_id").references(() => statuses.id, { onDelete: "cascade" }), // null = from any status
-  toStatusId: text("to_status_id").notNull().references(() => statuses.id, { onDelete: "cascade" }),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-});
-
-export type TransitionRule = typeof transitionRules.$inferSelect;
-export type InsertTransitionRule = typeof transitionRules.$inferInsert;
 
 // ---------------------------------------------------------------------------
 // queue_messages
