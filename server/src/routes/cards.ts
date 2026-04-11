@@ -1,17 +1,13 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards, comments, statuses, transitionRules, repos, features, cardDependencies, epics, workflowStatuses } from "../db/schema";
+import { cards, comments, statuses, repos, features, cardDependencies, epics, workflowStatuses } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
-import { git, worktreePath } from "../git";
+import { currentCheckedOutBranch, git, worktreePath } from "../git";
 import { nowIso } from "../helpers/db";
-
-function agentPatternMatch(pattern: string, agentId: string): boolean {
-  // Simple wildcard: * matches anything
-  const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$", "i");
-  return regex.test(agentId);
-}
+import { serializeCard, serializeCardWithComments } from "../helpers/presenters";
+import { nextCardRefNum } from "../db";
 
 function localDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -65,7 +61,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         allCards = allCards.filter((c) => !cardIdsWithActiveblockers.has(c.id));
       }
 
-      return allCards;
+      return allCards.map(serializeCard);
     },
     {
       query: t.Optional(
@@ -74,33 +70,6 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
           unblocked: t.Optional(t.String()),
         })
       ),
-    }
-  )
-  // What statuses can this agent move this card to?
-  .get(
-    "/:id/allowed-statuses",
-    ({ params, query }) => {
-      const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
-      if (!card) throw new Error("Not found");
-
-      const allStatuses = db.select().from(statuses).orderBy(statuses.position).all();
-      const rules = db.select().from(transitionRules).all();
-
-      // No rules = all statuses allowed
-      if (rules.length === 0 || !query.agentId) return allStatuses;
-
-      return allStatuses.filter((s) =>
-        rules.some((rule) => {
-          const agentMatch = rule.agentPattern === null || agentPatternMatch(rule.agentPattern, query.agentId!);
-          const fromMatch = rule.fromStatusId === null || rule.fromStatusId === card.statusId;
-          const toMatch = rule.toStatusId === s.id;
-          return agentMatch && fromMatch && toMatch;
-        })
-      );
-    },
-    {
-      params: t.Object({ id: t.String() }),
-      query: t.Object({ agentId: t.Optional(t.String()) }),
     }
   )
   // Claim a card — sets agentId and optionally auto-advances from To Do → In Progress
@@ -124,7 +93,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         }
       }
 
-      return updateCardAndBroadcast(params.id, patch);
+      return serializeCard(updateCardAndBroadcast(params.id, patch));
     },
     {
       params: t.Object({ id: t.String() }),
@@ -141,7 +110,8 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       .select()
       .from(cards)
       .all()
-      .filter((card) => card.completedAt && localDateKey(new Date(card.completedAt)) === today);
+      .filter((card) => card.completedAt && localDateKey(new Date(card.completedAt)) === today)
+      .map(serializeCard);
   })
   // Get single card with comments
   .get(
@@ -158,7 +128,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .from(comments)
         .where(eq(comments.cardId, params.id))
         .all();
-      return { ...card, comments: cardComments };
+      return serializeCardWithComments(card, cardComments);
     },
     { params: t.Object({ id: t.String() }) }
   )
@@ -175,6 +145,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       const now = nowIso();
       const row = {
         id,
+        refNum: nextCardRefNum(),
         featureId: body.featureId,
         epicId: feature.epicId,
         type: body.type ?? "task",
@@ -182,6 +153,10 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         description: body.description ?? "",
         statusId: body.statusId,
         agentId: body.agentId ?? null,
+        plan: body.plan ?? null,
+        latestUpdate: body.latestUpdate ?? null,
+        handoffSummary: body.handoffSummary ?? null,
+        blockedReason: body.blockedReason ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -192,7 +167,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         .where(eq(cards.id, id))
         .get()!;
       wsManager.broadcast("card:created", created);
-      return created;
+      return serializeCard(created);
     },
     {
       body: t.Object({
@@ -204,6 +179,10 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         ),
         description: t.Optional(t.String()),
         agentId: t.Optional(t.String()),
+        plan: t.Optional(t.String()),
+        latestUpdate: t.Optional(t.String()),
+        handoffSummary: t.Optional(t.String()),
+        blockedReason: t.Optional(t.String()),
       }),
     }
   )
@@ -219,32 +198,6 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         const status = db.select().from(statuses).where(eq(statuses.id, body.statusId)).get();
         if (status) {
           completedAt = status.name.toLowerCase() === "done" ? now : null;
-        }
-      }
-
-      // Enforce transition rules when agentId is changing the status
-      if (body.statusId && body.agentId !== undefined) {
-        // Use agentId from body if provided, else from current card
-        const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
-        const agentId = body.agentId ?? card?.agentId;
-        if (agentId) {
-          const rules = db.select().from(transitionRules).all();
-          if (rules.length > 0) {
-            const currentStatusId = card?.statusId;
-            // Check if any rule matches this agent + fromStatus + toStatus
-            const allowed = rules.some((rule) => {
-              // agentPattern match (null = wildcard)
-              const agentMatch = rule.agentPattern === null || agentPatternMatch(rule.agentPattern, agentId);
-              // fromStatusId match (null = any)
-              const fromMatch = rule.fromStatusId === null || rule.fromStatusId === currentStatusId;
-              // toStatusId must match
-              const toMatch = rule.toStatusId === body.statusId;
-              return agentMatch && fromMatch && toMatch;
-            });
-            if (!allowed) {
-              throw new Error(`Agent "${agentId}" is not permitted to move cards to this status`);
-            }
-          }
         }
       }
 
@@ -325,7 +278,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         }
       }
 
-      return updated;
+      return serializeCard(updated);
     },
     {
       params: t.Object({ id: t.String() }),
@@ -342,7 +295,12 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
             t.Literal("bug"),
             t.Literal("task"),
           ]),
+          plan: t.Union([t.String(), t.Null()]),
+          latestUpdate: t.Union([t.String(), t.Null()]),
+          handoffSummary: t.Union([t.String(), t.Null()]),
+          blockedReason: t.Union([t.String(), t.Null()]),
           conflictedAt: t.Optional(t.Union([t.String(), t.Null()])),
+          conflictDetails: t.Optional(t.Union([t.String(), t.Null()])),
         })
       ),
     }
@@ -357,10 +315,10 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
     },
     { params: t.Object({ id: t.String() }) }
   )
-  // Get diff for a card's branch vs main
+  // Get diff for a card's branch vs the repo's currently checked-out branch (fallback: repo base branch)
   .get(
     "/:id/diff",
-    ({ params, set }) => {
+    ({ params, query, set }) => {
       const card = db.select().from(cards).where(eq(cards.id, params.id)).get();
       if (!card) throw new Error("Not found");
 
@@ -380,16 +338,21 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         return { error: "Card has no repo associated" };
       }
 
-      const diffResult = git(["diff", `${repo.baseBranch}...${card.branchName}`], repo.path);
-      const statResult = git(["diff", "--stat", `${repo.baseBranch}...${card.branchName}`], repo.path);
+      const baseBranch = query.baseBranch ?? currentCheckedOutBranch(repo.path) ?? repo.baseBranch;
+      const diffResult = git(["diff", `${baseBranch}...${card.branchName}`], repo.path);
+      const statResult = git(["diff", "--stat", `${baseBranch}...${card.branchName}`], repo.path);
 
       return {
         diff: diffResult.stdout,
         stat: statResult.stdout,
+        baseBranch,
         branchName: card.branchName,
       };
     },
-    { params: t.Object({ id: t.String() }) }
+    {
+      params: t.Object({ id: t.String() }),
+      query: t.Object({ baseBranch: t.Optional(t.String({ minLength: 1 })) }),
+    }
   )
   // Merge a card's branch into a target branch
   .post(
@@ -610,6 +573,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         const status = blocker ? statusMap[blocker.statusId] : null;
         return {
           id: dep.blockerCardId,
+          ref: blocker ? serializeCard(blocker).ref : null,
           title: blocker?.title ?? "(deleted)",
           statusId: blocker?.statusId ?? "",
           statusName: status?.name ?? "",
@@ -624,6 +588,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         const status = blocked ? statusMap[blocked.statusId] : null;
         return {
           id: dep.blockedCardId,
+          ref: blocked ? serializeCard(blocked).ref : null,
           title: blocked?.title ?? "(deleted)",
           statusId: blocked?.statusId ?? "",
           statusName: status?.name ?? "",

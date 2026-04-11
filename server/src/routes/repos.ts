@@ -4,7 +4,7 @@ import { repos } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { nowIso } from "../helpers/db";
-import { currentCheckedOutBranch } from "../git";
+import { currentCheckedOutBranch, git } from "../git";
 
 export const repoRoutes = new Elysia({ prefix: "/repos" })
   .get("/", () => db.select().from(repos).all())
@@ -30,4 +30,28 @@ export const repoRoutes = new Elysia({ prefix: "/repos" })
   .delete("/:id", ({ params, set }) => {
     db.delete(repos).where(eq(repos.id, params.id)).run();
     set.status = 204;
-  });
+  })
+  .get(
+    "/:id/branches",
+    ({ params, set }) => {
+      const repo = db.select().from(repos).where(eq(repos.id, params.id)).get();
+      if (!repo) {
+        set.status = 404;
+        return { error: "Repo not found" };
+      }
+      const result = git(
+        ["branch", "--sort=-committerdate", "--format=%(refname:short)"],
+        repo.path
+      );
+      if (result.exitCode !== 0) {
+        set.status = 400;
+        return { error: result.stderr };
+      }
+      const branches = result.stdout
+        .split("\n")
+        .map((b) => b.trim())
+        .filter(Boolean);
+      return { branches };
+    },
+    { params: t.Object({ id: t.String() }) }
+  );
