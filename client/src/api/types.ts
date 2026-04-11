@@ -21,6 +21,8 @@ export interface Epic {
 
 export interface Feature {
   id: string;
+  ref: string;
+  refNum: number;
   epicId: string;
   title: string;
   description: string;
@@ -33,6 +35,8 @@ export interface Feature {
 
 export interface Card {
   id: string;
+  ref: string;
+  refNum: number;
   featureId: string;
   epicId: string | null;
   repoId?: string | null;
@@ -41,6 +45,10 @@ export interface Card {
   description: string;
   statusId: string;
   agentId: string | null;
+  plan: string | null;
+  latestUpdate: string | null;
+  handoffSummary: string | null;
+  blockedReason: string | null;
   branchName?: string | null;
   completedAt: string | null;
   conflictedAt: string | null;
@@ -83,14 +91,6 @@ export interface InputRequest {
   timeoutSecs: number;
 }
 
-export interface TransitionRule {
-  id: string;
-  agentPattern: string | null;
-  fromStatusId: string | null;
-  toStatusId: string;
-  createdAt: string;
-}
-
 export interface QueueMessage {
   id: string;
   agentId: string;
@@ -115,7 +115,6 @@ export interface Repo {
   name: string;
   path: string;
   baseBranch: string;
-  compareBase: string | null;
   buildCommand: string | null;
   createdAt: string;
 }
@@ -162,8 +161,8 @@ export interface CardDependency {
 }
 
 export interface DependencyInfo {
-  blockers: { id: string; title: string; statusId: string; statusName: string }[];
-  blocking: { id: string; title: string; statusId: string; statusName: string }[];
+  blockers: { id: string; ref: string | null; title: string; statusId: string; statusName: string }[];
+  blocking: { id: string; ref: string | null; title: string; statusId: string; statusName: string }[];
 }
 
 export interface BuildResult {

@@ -4,6 +4,7 @@ import { repos } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { nowIso } from "../helpers/db";
+import { currentCheckedOutBranch } from "../git";
 
 export const repoRoutes = new Elysia({ prefix: "/repos" })
   .get("/", () => db.select().from(repos).all())
@@ -11,11 +12,12 @@ export const repoRoutes = new Elysia({ prefix: "/repos" })
     "/",
     ({ body }) => {
       const now = nowIso();
-      const repo = { id: randomUUID(), ...body, baseBranch: body.baseBranch ?? "main", createdAt: now };
+      const inferredBase = currentCheckedOutBranch(body.path) ?? "main";
+      const repo = { id: randomUUID(), ...body, baseBranch: body.baseBranch ?? inferredBase, createdAt: now };
       db.insert(repos).values(repo).run();
       return repo;
     },
-    { body: t.Object({ name: t.String(), path: t.String(), baseBranch: t.Optional(t.String()), compareBase: t.Optional(t.String()), buildCommand: t.Optional(t.String()) }) }
+    { body: t.Object({ name: t.String(), path: t.String(), baseBranch: t.Optional(t.String()), buildCommand: t.Optional(t.String()) }) }
   )
   .patch(
     "/:id",
@@ -23,7 +25,7 @@ export const repoRoutes = new Elysia({ prefix: "/repos" })
       db.update(repos).set(body).where(eq(repos.id, params.id)).run();
       return db.select().from(repos).where(eq(repos.id, params.id)).get();
     },
-    { body: t.Partial(t.Object({ name: t.String(), path: t.String(), baseBranch: t.String(), compareBase: t.String(), buildCommand: t.String() })) }
+    { params: t.Object({ id: t.String() }), body: t.Partial(t.Object({ name: t.String(), path: t.String(), baseBranch: t.String(), buildCommand: t.String() })) }
   )
   .delete("/:id", ({ params, set }) => {
     db.delete(repos).where(eq(repos.id, params.id)).run();

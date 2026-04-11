@@ -22,7 +22,6 @@ interface EditState {
   name: string;
   path: string;
   baseBranch: string;
-  compareBase: string;
   buildCommand: string;
 }
 
@@ -31,7 +30,6 @@ export function ReposSection() {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [baseBranch, setBaseBranch] = useState("main");
-  const [compareBase, setCompareBase] = useState("");
   const [buildCommand, setBuildCommand] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -39,7 +37,6 @@ export function ReposSection() {
     name: "",
     path: "",
     baseBranch: "",
-    compareBase: "",
     buildCommand: "",
   });
   const [createAttempted, setCreateAttempted] = useState(false);
@@ -56,12 +53,11 @@ export function ReposSection() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const body: { name: string; path: string; baseBranch: string; compareBase?: string; buildCommand?: string } = {
+      const body: { name: string; path: string; baseBranch: string; buildCommand?: string } = {
         name: name.trim(),
         path: path.trim(),
         baseBranch: baseBranch.trim() || "main",
       };
-      if (compareBase.trim()) body.compareBase = compareBase.trim();
       if (buildCommand.trim()) body.buildCommand = buildCommand.trim();
       const { data } = await api.api.repos.post(body);
       return data!;
@@ -70,7 +66,6 @@ export function ReposSection() {
       setName("");
       setPath("");
       setBaseBranch("main");
-      setCompareBase("");
       setBuildCommand("");
       setCreateAttempted(false);
       queryClient.invalidateQueries({ queryKey: ["repos"] });
@@ -79,11 +74,10 @@ export function ReposSection() {
 
   const updateMutation = useMutation({
     mutationFn: async (id: string) => {
-      const body: { name?: string; path?: string; baseBranch?: string; compareBase?: string; buildCommand?: string } = {
+      const body: { name?: string; path?: string; baseBranch?: string; buildCommand?: string } = {
         name: editState.name.trim(),
         path: editState.path.trim(),
         baseBranch: editState.baseBranch.trim() || "main",
-        compareBase: editState.compareBase.trim() || undefined,
         buildCommand: editState.buildCommand.trim() || undefined,
       };
       await api.api.repos({ id }).patch(body);
@@ -123,7 +117,6 @@ export function ReposSection() {
       name: repo.name,
       path: repo.path,
       baseBranch: repo.baseBranch,
-      compareBase: repo.compareBase ?? "",
       buildCommand: repo.buildCommand ?? "",
     });
   };
@@ -151,18 +144,9 @@ export function ReposSection() {
               type="text"
               value={baseBranch}
               onChange={(e) => setBaseBranch(e.target.value)}
-              placeholder="Base branch (e.g. feature/my-branch)"
+              placeholder="Base branch (e.g. dev)"
               className={inputCls(false, "flex-1")}
             />
-            <input
-              type="text"
-              value={compareBase}
-              onChange={(e) => setCompareBase(e.target.value)}
-              placeholder="Compare base (e.g. main)"
-              className={inputCls(false, "flex-1")}
-            />
-          </div>
-          <div className="flex gap-2">
             <input
               type="text"
               value={buildCommand}
@@ -217,19 +201,12 @@ export function ReposSection() {
                       />
                       <input
                         type="text"
-                        value={editState.compareBase}
-                        onChange={(e) => setEditState((s) => ({ ...s, compareBase: e.target.value }))}
-                        placeholder="Compare base (e.g. main)"
+                        value={editState.buildCommand}
+                        onChange={(e) => setEditState((s) => ({ ...s, buildCommand: e.target.value }))}
+                        placeholder="Build command (e.g. bun run build)"
                         className={inputCls(false, "flex-1")}
                       />
                     </div>
-                    <input
-                      type="text"
-                      value={editState.buildCommand}
-                      onChange={(e) => setEditState((s) => ({ ...s, buildCommand: e.target.value }))}
-                      placeholder="Build command (e.g. bun run build)"
-                      className={inputCls(false)}
-                    />
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => {
@@ -259,7 +236,6 @@ export function ReposSection() {
                     <p className={`${adminItemMetaCls} truncate`}>{repo.path}</p>
                     <p className={adminItemSubtleCls}>
                       branch: {repo.baseBranch}
-                      {repo.compareBase ? ` | compare ${repo.compareBase}` : ""}
                       {repo.buildCommand ? ` | build ${repo.buildCommand}` : ""}
                     </p>
                   </div>
