@@ -105,10 +105,6 @@ Notes:
 - If `workflowId` is omitted, the server defaults to the first workflow of type `default`.
 - Deleting an epic cascades through its features and cards.
 - Epic commit browsing is repo-scoped, not feature-branch-scoped.
-- The compared range is:
-  - `compareBase..baseBranch` when `compareBase` exists
-  - otherwise `baseBranch`
-
 ## Features
 
 ```http

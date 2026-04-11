@@ -15,13 +15,14 @@ CLI-first interface for the running agent-board server.
 
 Global options:
   --url <url>       Override board URL (default: ${DEFAULT_BASE_URL})
-  --json            Reserved for machine-readable flows (objects already print as JSON)
+  --json            Force JSON output
 
 Top-level commands:
   help
   health
   raw <METHOD> <path> [--body-json <json> | --body-file <path>]
   start --agent <id> --card <card> [--plan "..."]
+  plan --card <card> --agent <id> "..."
   checkpoint --card <card> --agent <id> --body "..."
   finish --card <card> --agent <id> [--summary "..."] [--status "Done|Ready to Merge"]
   bootstrap --epic "..." --feature "..." --title "..." [--agent <id>]
@@ -37,7 +38,6 @@ Resource commands:
   feature help
   repo help
   workflow help
-  rule help
   worktree help
 
 Fallback:
@@ -68,7 +68,7 @@ Examples:
   );
 }
 
-export function taskflowHelp(command: "start" | "checkpoint" | "finish" | "bootstrap") {
+export function taskflowHelp(command: "start" | "plan" | "checkpoint" | "finish" | "bootstrap") {
   switch (command) {
     case "start":
       return section(
@@ -77,6 +77,14 @@ export function taskflowHelp(command: "start" | "checkpoint" | "finish" | "boots
   agentboard start --agent <id> --card <card> [--plan "..."] [--skip-inbox] [--no-auto-advance]
 
 Starts work on a card, claims it for the agent, optionally posts a plan, and returns pending inbox messages for that agent.`
+      );
+    case "plan":
+      return section(
+        "agentboard plan",
+        `Usage:
+  agentboard plan --card <card> --agent <id> "..."
+
+Updates the card's plan field and posts the same text as an agent comment.`
       );
     case "checkpoint":
       return section(
@@ -90,7 +98,7 @@ Posts a progress comment on the specified card.`
       return section(
         "agentboard finish",
         `Usage:
-  agentboard finish --card <card> --agent <id> [--summary "..."] [--status "Done"] [--no-comment]
+  agentboard finish --card <card> --agent <id> [--summary "..."] [--status "Done|Ready to Merge"] [--no-comment]
 
 Completes the specified card, choosing "Ready to Merge" automatically for branch-backed cards when available.`
       );
@@ -126,11 +134,11 @@ Aliases:
     `Usage:
   agentboard cards list [--status <status>] [--epic <epic>] [--feature <feature>] [--agent <id> | --mine]
   agentboard cards get <card>
+  agentboard cards context <card> [--agent <id>]
   agentboard cards create --title "..." --feature <feature> [--status <status>] [--agent <id>] [--claim]
   agentboard cards claim <card> [--agent <id>] [--no-auto-advance]
-  agentboard cards allowed <card> [--agent <id>]
   agentboard cards move <card> --to "<status>" [--agent <id>]
-  agentboard cards update <card> [--title ...] [--description ...] [--status ...] [--feature ...] [--epic ...] [--type ...]
+  agentboard cards update <card> [--title ...] [--description ...] [--status ...] [--feature ...] [--epic ...] [--type ...] [--plan ...] [--latest-update ...] [--handoff-summary ...] [--blocked-reason ...]
   agentboard cards comment <card> --agent <id> --body "..." [--author agent|user]
   agentboard cards diff <card>
   agentboard cards merge <card> [--strategy <strategy>] [--target <branch>]
@@ -170,7 +178,7 @@ export function communicationHelp(topic: "input" | "queue") {
   );
 }
 
-export function adminHelp(topic: "status" | "epic" | "feature" | "repo" | "workflow" | "rule" | "worktree") {
+export function adminHelp(topic: "status" | "epic" | "feature" | "repo" | "workflow" | "worktree") {
   switch (topic) {
     case "status":
       return section(
@@ -210,8 +218,8 @@ export function adminHelp(topic: "status" | "epic" | "feature" | "repo" | "workf
         "agentboard repo",
         `Usage:
   agentboard repo list
-  agentboard repo create --name "..." --path "..." [--base <branch>] [--compare-base <branch>] [--build "..."]
-  agentboard repo update <repo> [--name ...] [--path ...] [--base ...] [--compare-base ...] [--build ...]
+  agentboard repo create --name "..." --path "..." [--base <branch>] [--build "..."]
+  agentboard repo update <repo> [--name ...] [--path ...] [--base ...] [--build ...]
   agentboard repo delete <repo>`
       );
     case "workflow":
@@ -225,23 +233,20 @@ export function adminHelp(topic: "status" | "epic" | "feature" | "repo" | "workf
   agentboard workflow set-position <workflow> <workflowStatusId> <position>
   agentboard workflow set-merge <workflow> <workflowStatusId> <true|false>`
       );
-    case "rule":
-      return section(
-        "agentboard rule",
-        `Usage:
-  agentboard rule list
-  agentboard rule create --to <status> [--from <status>] [--agent-pattern <pattern>]
-  agentboard rule delete <ruleId>`
-      );
     case "worktree":
       return section(
         "agentboard worktree",
         `Usage:
-  agentboard worktree create <card> --repo <repo> [--branch <branch>] [--base <branch>]
+  agentboard worktree create <card> --repo <repo> [--agent <id>] [--branch <branch>] [--base <branch>]
   agentboard worktree remove <branch> --repo <repo>
   agentboard worktree remove --card <card> --repo <repo>
 
-Branch names can be inferred from the card or feature when available.`
+Branch selection order:
+  1. Explicit --branch
+  2. Existing card branch
+  3. Generated per-card branch like wt/<agent>/<card-ref>-<slug>
+
+Base branch defaults to the repo's currently checked-out branch unless --base is passed (then falls back to repo base branch).`
       );
   }
 }
