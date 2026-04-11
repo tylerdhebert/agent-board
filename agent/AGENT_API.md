@@ -12,8 +12,7 @@ CLI aliases such as `session`, `inbox`, singular/plural resource names, and work
 
 - `agentId` is an arbitrary caller-chosen string such as `implementer-1`.
 - Queue conversations are keyed by exact `agentId`.
-- Transition rules are only enforced when a card status change includes `agentId`.
-- Omitting `agentId` during `PATCH /cards/:id` bypasses transition-rule enforcement.
+- Use the common path `To Do -> In Progress -> In Review -> Needs Revision -> Done` unless the situation clearly calls for something else.
 
 ## Health
 
@@ -68,15 +67,13 @@ POST /repos
   "name": "agent-board",
   "path": "C:\\Users\\Tyler\\Documents\\projects\\agent-board",
   "baseBranch": "main",
-  "compareBase": "origin/main",
   "buildCommand": "bun run build"
 }
 ```
 
 Notes:
 
-- `baseBranch` defaults to `main`.
-- `compareBase` is used for epic-level commit browsing.
+- `baseBranch` defaults to the currently checked-out branch at `path` when available, otherwise `main`.
 - `buildCommand` is optional but required for feature builds.
 
 ## Epics
@@ -161,16 +158,12 @@ GET /cards?status=<statusId>
 GET /cards?unblocked=true
 GET /cards/:id
 GET /cards/completed-today
-GET /cards/:id/allowed-statuses?agentId=<agentId>
 ```
 
 Notes:
 
 - `GET /cards/:id` returns the card plus embedded `comments`.
 - `unblocked=true` excludes cards with any active blocker whose blocker card is not in `Done`.
-- `allowed-statuses` returns every status when:
-  - no transition rules exist, or
-  - no `agentId` is supplied
 
 ### Create, claim, update, delete
 
@@ -222,7 +215,6 @@ Critical behavior:
 - Claiming auto-advances `To Do -> In Progress` unless `autoAdvance` is `false`.
 - Moving a card to `Done` stamps `completedAt`.
 - Moving a card away from `Done` clears `completedAt`.
-- Transition rules are enforced only when the patch includes `agentId`.
 
 ### Comments
 
@@ -263,10 +255,10 @@ POST /cards/:id/merge
 
 Notes:
 
-- `GET /cards/:id/diff` compares `repo.baseBranch...card.branchName`.
+- `GET /cards/:id/diff` compares `<current-checked-out-branch-or-repo.baseBranch>...card.branchName`.
 - `POST /cards/:id/recheck-conflicts` reruns `git merge-tree` and updates `conflictedAt` and `conflictDetails`.
 - `POST /cards/:id/merge` is a destructive orchestration route. It:
-  - refuses when `conflictedAt` is still set
+  - refuses when `conflictedAt` is set
   - removes the worktree
   - checks out the target branch
   - merges or squash-merges the card branch
@@ -308,7 +300,7 @@ Notes:
 
 - `:id` is the blocked card.
 - Self-blocking is rejected.
-- When a blocker reaches `Done`, the server emits an unblock event if the dependent card is no longer blocked by any active blocker.
+- When a blocker reaches `Done`, the server emits an unblock event if the dependent card has no active blockers.
 
 ## Input requests
 
@@ -371,7 +363,7 @@ Notes:
 - `GET /input` lists requests and supports filtering by `status` and `cardId`.
 - If a status named exactly `Blocked` exists, the server moves the card there while the request is pending.
 - The server records `previousStatusId`.
-- On answer or timeout, the previous status is restored only if the card is still in `Blocked`.
+- On answer or timeout, the previous status is restored only if the card is in `Blocked`.
 - Timeout response is HTTP `408` with:
 
 ```json
@@ -438,9 +430,8 @@ Creation behavior:
 - the worktree path is derived from `repo.path` plus branch name
 - base branch resolution is:
   1. explicit `baseBranch`
-  2. `feature.branchName` if present
-  3. otherwise `HEAD`
-- if the chosen feature branch does not exist yet, the server creates it from `repo.baseBranch`
+  2. currently checked-out branch at `repo.path`
+  3. `repo.baseBranch`
 - if the requested card branch already exists, the server adds the worktree without `-b`
 - the card's `branchName` and `repoId` are updated on success
 
@@ -485,31 +476,6 @@ Notes:
 - `GET /workflows/:id/statuses` returns joined metadata including `name` and `color`.
 - `PATCH /workflows/:id/statuses/:wsId` is a legacy generic route. Prefer the dedicated `/position` and `/merge` endpoints.
 
-## Transition rules
-
-```http
-GET    /transition-rules
-POST   /transition-rules
-DELETE /transition-rules/:id
-```
-
-Bodies:
-
-```json
-POST /transition-rules
-{
-  "toStatusId": "status-id",
-  "fromStatusId": "status-id",
-  "agentPattern": "implementer*"
-}
-```
-
-Notes:
-
-- `agentPattern` is case-insensitive and supports `*`.
-- `fromStatusId: null` means "from any status".
-- Rules only matter when status changes include `agentId`.
-
 ## CLI-only conveniences
 
 These are implemented by the repo CLI, not the server itself:
@@ -520,6 +486,5 @@ These are implemented by the repo CLI, not the server itself:
 - `input wait`
 - `input list` / `input get`
 - `raw --query key=value`
-- `cards move` preflight validation against allowed statuses
 
 For those behaviors, see `AGENT_CLI.md`.

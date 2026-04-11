@@ -84,7 +84,7 @@ export function Combobox({ options, value, onChange, placeholder, className }: C
           setQuery(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { setOpen(true); setHighlighted(0); }}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className="field-shell w-full px-3 py-2 text-xs font-mono"
@@ -96,7 +96,7 @@ export function Combobox({ options, value, onChange, placeholder, className }: C
           <ul id={listboxId} role="listbox" className="max-h-52 overflow-y-auto py-1">
             {filtered.map((option, i) => (
               <li
-                key={i}
+                key={option}
                 id={`${listboxId}-option-${i}`}
                 role="option"
                 aria-selected={i === highlighted}

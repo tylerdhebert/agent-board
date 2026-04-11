@@ -6,6 +6,7 @@ import {
   loadCards,
   loadEpics,
   loadFeatures,
+  loadRepos,
   resolveCardId,
   resolveEpicId,
   resolveFeatureId,
@@ -156,12 +157,20 @@ export async function handleFeature(state: CommandState, args: string[]) {
           ? resolveAgentId(state, parsed.values.agent, true)
           : null;
       const cards = agentId ? await loadCards(state) : null;
-
-      return features.filter((feature) => {
+      const filtered = features.filter((feature) => {
         if (epicId && feature.epicId !== epicId) return false;
         if (!agentId || !cards) return true;
         return cards.some((card) => card.featureId === feature.id && card.agentId === agentId);
       });
+      const repos = await loadRepos(state);
+
+      return {
+        __render: "feature-list",
+        data: filtered.map((feature) => ({
+          ...feature,
+          repoName: repos.find((repo) => repo.id === feature.repoId)?.name ?? null,
+        })),
+      };
     }
     case "create": {
       const parsed = parseFlags(rest, {
@@ -249,25 +258,22 @@ export async function handleRepo(state: CommandState, args: string[]) {
         name: { type: "string" },
         path: { type: "string" },
         base: { type: "string" },
-        compareBase: { type: "string" },
         build: { type: "string" },
       });
       return state.client.request("POST", "/repos", {
         name: requireString(parsed.values, "name"),
         path: requireString(parsed.values, "path"),
         baseBranch: parsed.values.base as string | undefined,
-        compareBase: parsed.values.compareBase as string | undefined,
         buildCommand: parsed.values.build as string | undefined,
       });
     }
     case "update": {
       const [repoRef, ...tail] = rest;
-      if (!repoRef) throw new CliError("Usage: agentboard repo update <repo> [--name ...] [--path ...] [--base ...] [--compare-base ...] [--build ...]");
+      if (!repoRef) throw new CliError("Usage: agentboard repo update <repo> [--name ...] [--path ...] [--base ...] [--build ...]");
       const parsed = parseFlags(tail, {
         name: { type: "string" },
         path: { type: "string" },
         base: { type: "string" },
-        compareBase: { type: "string" },
         build: { type: "string" },
       });
       const repoId = await resolveRepoId(state, repoRef);
@@ -275,7 +281,6 @@ export async function handleRepo(state: CommandState, args: string[]) {
       if (typeof parsed.values.name === "string") body.name = parsed.values.name;
       if (typeof parsed.values.path === "string") body.path = parsed.values.path;
       if (typeof parsed.values.base === "string") body.baseBranch = parsed.values.base;
-      if (typeof parsed.values.compareBase === "string") body.compareBase = parsed.values.compareBase;
       if (typeof parsed.values.build === "string") body.buildCommand = parsed.values.build;
       return state.client.request("PATCH", `/repos/${encodeURIComponent(repoId)}`, body);
     }
@@ -347,40 +352,6 @@ export async function handleWorkflow(state: CommandState, args: string[]) {
   }
 }
 
-export async function handleRule(state: CommandState, args: string[]) {
-  const [action, ...rest] = args;
-  if (!action || action === "help" || action === "--help" || action === "-h") {
-    return adminHelp("rule");
-  }
-
-  switch (action) {
-    case "list":
-      return state.client.request("GET", "/transition-rules");
-    case "create": {
-      const parsed = parseFlags(rest, {
-        to: { type: "string" },
-        from: { type: "string" },
-        agentPattern: { type: "string" },
-      });
-      return state.client.request("POST", "/transition-rules", {
-        toStatusId: await resolveStatusId(state, requireString(parsed.values, "to")),
-        fromStatusId:
-          typeof parsed.values.from === "string"
-            ? await resolveStatusId(state, parsed.values.from)
-            : undefined,
-        agentPattern: parsed.values.agentPattern as string | undefined,
-      });
-    }
-    case "delete": {
-      const ruleId = rest[0];
-      if (!ruleId) throw new CliError("Usage: agentboard rule delete <ruleId>");
-      return state.client.request("DELETE", `/transition-rules/${encodeURIComponent(ruleId)}`);
-    }
-    default:
-      throw new CliError(`Unknown rule command "${action}". Run "agentboard rule help" for usage.`);
-  }
-}
-
 export async function handleWorktree(state: CommandState, args: string[]) {
   const [action, ...rest] = args;
   if (!action || action === "help" || action === "--help" || action === "-h") {
@@ -394,6 +365,7 @@ export async function handleWorktree(state: CommandState, args: string[]) {
         repo: { type: "string" },
         branch: { type: "string" },
         base: { type: "string" },
+        agent: { type: "string" },
       });
       const cardId = await resolveCardId(
         state,
@@ -405,17 +377,29 @@ export async function handleWorktree(state: CommandState, args: string[]) {
         card.featureId
           ? (await loadFeatures(state)).find((item) => item.id === card.featureId)
           : undefined;
+      const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false) ?? card.agentId ?? null;
       const branchName =
         (parsed.values.branch as string | undefined)
         ?? card.branchName
-        ?? feature?.branchName
-        ?? buildGeneratedBranchName(resolveAgentId(state, undefined, false), card);
-      return state.client.request("POST", "/worktrees", {
+        ?? buildGeneratedBranchName(agentId, card);
+      const created = await state.client.request<{ path: string; branchName: string; cardId: string }>("POST", "/worktrees", {
         cardId,
         repoId,
         branchName,
         baseBranch: parsed.values.base as string | undefined,
       });
+      return {
+        __render: "worktree",
+        data: {
+          ...created,
+          cardRef: card.ref,
+          baseBranch: parsed.values.base as string | undefined,
+          note:
+            !(parsed.values.base as string | undefined)
+              ? "Base branch defaults to the repo's currently checked-out branch."
+              : undefined,
+        },
+      };
     }
     case "delete":
     case "remove": {

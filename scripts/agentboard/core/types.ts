@@ -38,7 +38,6 @@ export interface Repo {
   name: string;
   path: string;
   baseBranch: string;
-  compareBase?: string | null;
   buildCommand?: string | null;
 }
 
@@ -54,6 +53,8 @@ export interface Epic {
 
 export interface Feature {
   id: string;
+  ref: string;
+  refNum: number;
   epicId: string;
   title: string;
   description: string;
@@ -66,6 +67,8 @@ export interface Feature {
 
 export interface Card {
   id: string;
+  ref: string;
+  refNum: number;
   featureId: string;
   epicId?: string | null;
   repoId?: string | null;
@@ -74,6 +77,10 @@ export interface Card {
   description: string;
   statusId: string;
   agentId?: string | null;
+  plan?: string | null;
+  latestUpdate?: string | null;
+  handoffSummary?: string | null;
+  blockedReason?: string | null;
   branchName?: string | null;
   completedAt?: string | null;
   conflictedAt?: string | null;
@@ -90,6 +97,15 @@ export interface QueueMessage {
   author: string;
   createdAt: string;
   readAt?: string | null;
+}
+
+export interface Comment {
+  id: string;
+  cardId: string;
+  author: "agent" | "user";
+  agentId?: string | null;
+  body: string;
+  createdAt: string;
 }
 
 export interface InputQuestion {
@@ -110,6 +126,43 @@ export interface InputRequestRecord {
   requestedAt: string;
   answeredAt?: string | null;
   timeoutSecs: number;
+}
+
+export interface CardDependencyEntry {
+  id: string;
+  ref: string | null;
+  title: string;
+  statusId: string;
+  statusName: string;
+}
+
+export interface CardDependencies {
+  blockers: CardDependencyEntry[];
+  blocking: CardDependencyEntry[];
+}
+
+export interface CardContextData {
+  card: Card;
+  statusName: string;
+  featureTitle: string | null;
+  featureRef: string | null;
+  epicTitle: string | null;
+  blocked: boolean;
+  waitingOnInput: boolean;
+  pendingInputPrompts: string[];
+  blockers: CardDependencyEntry[];
+  blocking: CardDependencyEntry[];
+  repoName: string | null;
+  repoPath: string | null;
+  repoBaseBranch: string | null;
+  featureBranchName: string | null;
+  suggestedBranchName: string | null;
+  recentComments: Comment[];
+}
+
+export interface RenderEnvelope<T = unknown> {
+  __render: string;
+  data: T;
 }
 
 export interface CommandState {
