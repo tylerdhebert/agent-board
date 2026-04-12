@@ -18,7 +18,11 @@ export function CardTile({ card, status, blockedCardIds }: Props) {
 
   const isPulsing = pulsingCardIds.has(card.id);
   const hasUnseenComment = unseenCommentCardIds.has(card.id);
-  const isBlocked = blockedCardIds?.has(card.id) ?? false;
+  const isBlocked =
+    (blockedCardIds?.has(card.id) ?? false)
+    || status.name.toLowerCase() === "blocked"
+    || Boolean(card.blockedReason);
+  const summary = card.blockedReason ?? card.latestUpdate ?? card.plan ?? null;
 
   const handleClick = () => {
     clearUnseenComment(card.id);
@@ -45,6 +49,9 @@ export function CardTile({ card, status, blockedCardIds }: Props) {
       )}
 
       <div className="mb-3 flex items-center gap-1.5">
+        <span className="rounded-[10px] border border-[var(--border-soft)] bg-[var(--panel-ink)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)]">
+          {card.ref}
+        </span>
         <TypeBadge type={card.type} />
         <StatusBadge status={status} />
         <div className="ml-auto flex items-center gap-1.5">
@@ -69,6 +76,12 @@ export function CardTile({ card, status, blockedCardIds }: Props) {
       <p className="line-clamp-3 text-[14px] font-semibold leading-snug text-[var(--text-primary)]">
         {card.title}
       </p>
+
+      {summary && (
+        <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+          {summary}
+        </p>
+      )}
 
       {card.branchName && (
         <div className="mt-3">

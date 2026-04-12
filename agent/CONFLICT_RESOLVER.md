@@ -21,10 +21,12 @@ agentboard cards claim card-142 --agent conflict-resolver
 agentboard cards context --card card-142 --agent conflict-resolver
 ```
 
-The context output will show:
-- `branchName`: the card's working branch
-- `conflictDetails`: the raw `git merge-tree` output showing what conflicts exist
-- The feature and repo — this tells you the target branch (feature branch or repo `baseBranch`)
+The context output format is `key: value` lines. Look for:
+- `Card branch:` - the branch to work on
+- `Conflicted: yes (since Xh)` - confirms conflict state is active
+- `Conflict details:` - the raw conflict summary
+- `Repo base branch:` - fallback target if no feature branch
+- `Feature base branch:` - rebase target when set
 
 Ensure a worktree exists for the card branch:
 
@@ -76,6 +78,8 @@ agentboard feature build <feat-ref>
 agentboard feature build-status <feat-ref>
 ```
 
+`feature build-status` prints `key: value` output with a `status:` field (`running`, `passed`, or `failed`). Poll until `status: passed` before proceeding.
+
 Wait for the build to pass. If it fails, fix the build issue — conflicts that compile but break behaviour are still conflicts.
 
 ## After resolution
@@ -89,7 +93,7 @@ agentboard cards update card-142 --clear-conflict
 Post a summary comment:
 
 ```bash
-agentboard cards comment card-142 --agent conflict-resolver \
+agentboard cards comment --card card-142 --agent conflict-resolver \
   --body "Resolved conflicts in <list of files>. Approach: <brief description of how each conflict was handled>. Build: passed."
 ```
 
@@ -114,3 +118,4 @@ agentboard finish --agent conflict-resolver --card card-142 \
 - `conflictedAt` is cleared on the card before finishing.
 - Handoff summary is set so the board-agent can advance the card.
 - Resolution comment is detailed enough that the user can audit the decisions.
+

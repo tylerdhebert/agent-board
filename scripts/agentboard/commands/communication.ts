@@ -2,7 +2,7 @@ import { boolValue, parseFlags, parseJson, readJsonFile, requireString } from ".
 import { CliError } from "../core/errors";
 import { toQueryString } from "../core/helpers";
 import { resolveAgentId, resolveCardId } from "../core/resolvers";
-import { communicationHelp, wantsScopedHelp } from "../help";
+import { communicationHelp } from "../help";
 import type { CommandState, InputQuestion, InputRequestRecord, QueueMessage } from "../core/types";
 
 const DEFAULT_POLL_INTERVAL_SECS = 2;
@@ -162,8 +162,10 @@ export async function handleInput(state: CommandState, args: string[]) {
   }
 
   switch (action) {
-    case "pending":
-      return state.client.request("GET", `/input${toQueryString({ status: "pending" })}`);
+    case "pending": {
+      const data = await state.client.request("GET", `/input${toQueryString({ status: "pending" })}`);
+      return { __render: "input-list", data };
+    }
     case "list": {
       const parsed = parseFlags(rest, {
         status: { type: "string" },
@@ -173,20 +175,22 @@ export async function handleInput(state: CommandState, args: string[]) {
         typeof parsed.values.card === "string"
           ? await resolveCardId(state, parsed.values.card)
           : undefined;
-      return state.client.request<InputRequestRecord[]>(
+      const data = await state.client.request<InputRequestRecord[]>(
         "GET",
         `/input${toQueryString({
           status: parsed.values.status as string | undefined,
           cardId,
         })}`
       );
+      return { __render: "input-list", data };
     }
     case "get": {
       const requestId = rest[0];
       if (!requestId) {
         throw new CliError('Usage: agentboard input get <requestId>');
       }
-      return state.client.request<InputRequestRecord>("GET", `/input/${encodeURIComponent(requestId)}`);
+      const data = await state.client.request<InputRequestRecord>("GET", `/input/${encodeURIComponent(requestId)}`);
+      return { __render: "record", data };
     }
     case "wait": {
       const [requestId, ...tail] = rest;
@@ -198,11 +202,12 @@ export async function handleInput(state: CommandState, args: string[]) {
         pollInterval: { type: "number", default: DEFAULT_POLL_INTERVAL_SECS },
         heartbeat: { type: "number", default: DEFAULT_HEARTBEAT_SECS },
       });
-      return waitForInputRequest(state, requestId, {
+      const data = await waitForInputRequest(state, requestId, {
         timeoutSecs: parsed.values.timeout as number | undefined,
         pollIntervalSecs: parsed.values.pollInterval as number | undefined,
         heartbeatSecs: parsed.values.heartbeat as number | undefined,
       });
+      return { __render: "input-record", data };
     }
     case "request": {
       const parsed = parseFlags(rest, {
@@ -229,11 +234,12 @@ export async function handleInput(state: CommandState, args: string[]) {
         timeoutSecs: parsed.values.timeout as number,
         detach: true,
       });
-      return waitForInputRequest(state, request.id, {
+      const data = await waitForInputRequest(state, request.id, {
         timeoutSecs: parsed.values.timeout as number,
         pollIntervalSecs: parsed.values.pollInterval as number | undefined,
         heartbeatSecs: parsed.values.heartbeat as number | undefined,
       });
+      return { __render: "input-record", data };
     }
     case "answer": {
       const [requestId, ...tail] = rest;
@@ -246,7 +252,8 @@ export async function handleInput(state: CommandState, args: string[]) {
         answer: { type: "string[]" },
       });
       const answers = parseAnswersFromArgs(parsed.values);
-      return state.client.request("POST", `/input/${encodeURIComponent(requestId)}/answer`, { answers });
+      await state.client.request("POST", `/input/${encodeURIComponent(requestId)}/answer`, { answers });
+      return { __render: "action", data: { message: `Answered request ${requestId}` } };
     }
     default:
       throw new CliError(`Unknown input command "${action}". Run "agentboard input help" for usage.`);
@@ -258,13 +265,16 @@ export async function handleQueue(state: CommandState, args: string[]) {
   if (!action || action === "help" || action === "--help" || action === "-h") {
     return communicationHelp("queue");
   }
-  if ((action === "inbox" || action === "list") && wantsScopedHelp(rest)) {
+  if ((action === "inbox" || action === "list")
+    && (rest[0] === "help" || rest.includes("--help") || rest.includes("-h"))) {
     return communicationHelp("queue");
   }
 
   switch (action) {
-    case "conversations":
-      return state.client.request("GET", "/queue/conversations");
+    case "conversations": {
+      const data = await state.client.request("GET", "/queue/conversations");
+      return { __render: "queue-conversations", data };
+    }
     case "list":
     case "inbox": {
       const parsed = parseFlags(rest, {
@@ -286,7 +296,10 @@ export async function handleQueue(state: CommandState, args: string[]) {
           }
         }
       }
-      return messages;
+      return {
+        __render: "queue-list",
+        data: messages,
+      };
     }
     case "reply": {
       const parsed = parseFlags(rest, {
@@ -294,14 +307,15 @@ export async function handleQueue(state: CommandState, args: string[]) {
       });
       const body = parsed.positionals.join(" ").trim();
       if (!body) {
-        throw new CliError('Usage: agentboard queue reply "Message text..."');
+        throw new CliError('Usage: agentboard queue reply --agent <id> "Message text..."');
       }
       const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
-      return state.client.request("POST", "/queue", {
+      await state.client.request("POST", "/queue", {
         agentId,
         body,
         author: agentId,
       });
+      return { __render: "action", data: { message: "Reply sent" } };
     }
     case "send": {
       const parsed = parseFlags(rest, {
@@ -314,16 +328,18 @@ export async function handleQueue(state: CommandState, args: string[]) {
         (parsed.values.author as string | undefined)
         ?? resolveAgentId(state, undefined, false)
         ?? "user";
-      return state.client.request("POST", "/queue", {
+      await state.client.request("POST", "/queue", {
         agentId: targetAgentId,
         body: requireString(parsed.values, "body"),
         author,
       });
+      return { __render: "action", data: { message: `Sent to ${targetAgentId}` } };
     }
     case "read": {
       const messageId = rest[0];
       if (!messageId) throw new CliError("Usage: agentboard queue read <messageId>");
-      return state.client.request("POST", `/queue/${encodeURIComponent(messageId)}/read`);
+      await state.client.request("POST", `/queue/${encodeURIComponent(messageId)}/read`);
+      return { __render: "action", data: { message: `Marked read: ${messageId}` } };
     }
     case "read-all": {
       const parsed = parseFlags(rest, { agent: { type: "string" } });
@@ -335,18 +351,23 @@ export async function handleQueue(state: CommandState, args: string[]) {
       for (const message of messages) {
         await state.client.request("POST", `/queue/${encodeURIComponent(message.id)}/read`);
       }
-      return { agentId, markedRead: messages.length };
+      return {
+        __render: "action",
+        data: { message: `Marked ${messages.length} messages read for ${agentId}` },
+      };
     }
     case "delete": {
       const messageId = rest[0];
       if (!messageId) throw new CliError("Usage: agentboard queue delete <messageId>");
-      return state.client.request("DELETE", `/queue/${encodeURIComponent(messageId)}`);
+      await state.client.request("DELETE", `/queue/${encodeURIComponent(messageId)}`);
+      return { __render: "action", data: { message: `Deleted message ${messageId}` } };
     }
     case "clear":
     case "clear-conversation": {
       const parsed = parseFlags(rest, { agent: { type: "string" } });
       const agentId = requireString(parsed.values, "agent");
-      return state.client.request("DELETE", `/queue/conversations/${encodeURIComponent(agentId)}`);
+      await state.client.request("DELETE", `/queue/conversations/${encodeURIComponent(agentId)}`);
+      return { __render: "action", data: { message: `Conversation cleared for ${agentId}` } };
     }
     default:
       throw new CliError(`Unknown queue command "${action}". Run "agentboard queue help" for usage.`);

@@ -92,7 +92,7 @@ export function Combobox({ options, value, onChange, placeholder, className }: C
         autoComplete="off"
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-[14px] border border-[var(--accent-border)] bg-[var(--panel-bg)] shadow-lg">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-[14px] border border-[var(--accent-border)] bg-[var(--panel-ink)] shadow-lg">
           <ul id={listboxId} role="listbox" className="max-h-52 overflow-y-auto py-1">
             {filtered.map((option, i) => (
               <li

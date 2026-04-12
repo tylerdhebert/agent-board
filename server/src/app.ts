@@ -8,7 +8,6 @@ import { epicRoutes } from "./routes/epics";
 import { featureRoutes } from "./routes/features";
 import { cardRoutes } from "./routes/cards";
 import { inputRoutes } from "./routes/input";
-import { transitionRuleRoutes } from "./routes/transitionRules";
 import { queueRoutes } from "./routes/queue";
 import { shortcutRoutes } from "./routes/shortcuts";
 import { worktreeRoutes } from "./routes/worktrees";
@@ -71,7 +70,6 @@ export const app = new Elysia()
       .use(featureRoutes)
       .use(cardRoutes)
       .use(inputRoutes)
-      .use(transitionRuleRoutes)
       .use(queueRoutes)
       .use(shortcutRoutes)
       .use(worktreeRoutes)

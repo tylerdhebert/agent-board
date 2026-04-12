@@ -1,9 +1,9 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards, repos, features } from "../db/schema";
+import { cards, repos } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { wsManager } from "../wsManager";
-import { git, worktreePath } from "../git";
+import { currentCheckedOutBranch, git, worktreePath } from "../git";
 import { nowIso } from "../helpers/db";
 
 export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
@@ -19,22 +19,8 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
 
       const wtPath = worktreePath(repo.path, body.branchName);
 
-      // Determine the base: explicit > feature branch > HEAD
-      let base = body.baseBranch ?? "HEAD";
-      if (!body.baseBranch) {
-        const card = db.select().from(cards).where(eq(cards.id, body.cardId)).get();
-        const feature = card?.featureId
-          ? db.select().from(features).where(eq(features.id, card.featureId)).get()
-          : null;
-        if (feature?.branchName) {
-          // Create the feature branch if it doesn't exist yet (without checking it out)
-          const exists = git(["rev-parse", "--verify", feature.branchName], repo.path);
-          if (exists.exitCode !== 0) {
-            git(["branch", feature.branchName, repo.baseBranch], repo.path);
-          }
-          base = feature.branchName;
-        }
-      }
+      // Determine the base: explicit > currently checked-out repo branch > configured repo base branch
+      const base = body.baseBranch ?? currentCheckedOutBranch(repo.path) ?? repo.baseBranch;
 
       // If the card branch already exists, add the worktree without -b
       const branchExists = git(["rev-parse", "--verify", body.branchName], repo.path);
@@ -82,8 +68,25 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
 
       const wtPath = worktreePath(repo.path, params.branchName);
 
-      git(["worktree", "remove", "--force", wtPath], repo.path);
-      git(["branch", "-D", params.branchName], repo.path);
+      const removeResult = git(["worktree", "remove", "--force", wtPath], repo.path);
+      const removeFailed =
+        removeResult.exitCode !== 0
+        && !removeResult.stderr.includes("is not a working tree")
+        && !removeResult.stderr.includes("No such file or directory");
+
+      const deleteBranchResult = git(["branch", "-D", params.branchName], repo.path);
+      const branchDeleteFailed =
+        deleteBranchResult.exitCode !== 0
+        && !deleteBranchResult.stderr.toLowerCase().includes("not found");
+
+      if (removeFailed || branchDeleteFailed) {
+        set.status = 409;
+        return {
+          error: "Failed to remove worktree branch cleanly",
+          worktreeError: removeFailed ? removeResult.stderr : null,
+          branchError: branchDeleteFailed ? deleteBranchResult.stderr : null,
+        };
+      }
 
       // Clear branch_name on any card that had this branch
       const now = nowIso();

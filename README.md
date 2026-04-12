@@ -34,7 +34,7 @@ The database is created automatically at `data/agent-board.db` on first run. Def
 - **Build status** — per-feature build trigger with live status badge and expandable output in the commit panel
 - **Card dependencies** — link cards as blockers; blocked cards show a lock icon on the board
 - **Merge conflict detection** — auto-runs `git merge-tree` when a card reaches a merge-trigger status; shows conflict details per file in a diff-style viewer
-- **Admin panel** — manage statuses, workflows, repos, epics, features, cards, transition rules, and keyboard shortcuts
+- **Admin panel** — manage statuses, workflows, repos, epics, features, cards, and keyboard shortcuts
 
 ### For agents
 - Create and update cards to represent their work
@@ -50,18 +50,14 @@ The database is created automatically at `data/agent-board.db` on first run. Def
 
 ## Integrating agents
 
-### Include `agent/AGENT_API.md` in agent instructions
+### Include CLI-first agent docs in agent instructions
 
-`agent/AGENT_API.md` is a concise HTTP reference written for agents. Include it in any agent's system prompt:
+For normal operation, provide these docs first:
 
-```
-You have access to a task board at http://localhost:31377.
-See the API reference below.
+- `agent/AGENT_CLI.md`
+- `agent/AGENT_MANDATE.md`
 
-<agent_api>
-[contents of agent/AGENT_API.md]
-</agent_api>
-```
+Use `agent/AGENT_API.md` only as the raw HTTP fallback when the CLI does not expose what is needed.
 
 ### Reuse the agent docs with symlink scripts
 
@@ -70,8 +66,17 @@ The reusable agent instruction docs now live in `agent/`:
 - `agent/AGENT_CLI.md`
 - `agent/AGENT_MANDATE.md`
 - `agent/AGENT_API.md`
+- `agent/ORCHESTRATOR.md`
 
-To symlink those three files into another directory, run one of:
+Useful defaults:
+
+- Prefer card refs like `card-142` and feature refs like `feat-12` in CLI workflows.
+- The CLI now defaults to readable output for common commands. Add `--json` when you want raw machine-friendly output.
+- The normal card path is `To Do -> In Progress -> In Review -> Needs Revision -> Done`, with `Blocked` reserved for real pauses.
+- For parallel work on one feature, use separate card worktree branches per agent. Treat the feature branch as the integration base, not the shared implementation branch.
+- `Ready to Merge` is the merge-ready status for worktree workflows.
+
+To symlink those agent docs into another directory, run one of:
 
 ```bash
 bash agent/scripts/link-agent-docs.sh /path/to/destination
@@ -82,25 +87,6 @@ powershell -ExecutionPolicy Bypass -File .\agent\scripts\link-agent-docs.ps1 -De
 ```
 
 On Windows, creating file symlinks may require an elevated shell or Developer Mode.
-
-### Claude Code agents — slash command skills
-
-`.claude/commands/` contains Claude Code slash command skills:
-
-```
-/board-create-card      Build the login page — task, assign to frontend-agent
-/board-update-card      abc-123 set status to In Review
-/board-complete-card    abc-123 All tests passing, PR merged
-/board-block-card       abc-123 Waiting for API keys from the infra team
-/board-request-input    abc-123 Should I overwrite the existing config?
-/board-add-comment      abc-123 Found 3 failing tests, investigating now
-/board-list-cards       Blocked
-/board-get-card         abc-123
-/board-create-epic      Authentication Overhaul — replace session tokens with JWTs
-/board-create-feature   epic-456 JWT Issuance — token signing and refresh flow
-/board-check-messages   implementer-1
-/board-send-message     implementer-1 Please prioritize the auth bug next
-```
 
 ---
 
@@ -113,13 +99,13 @@ The UI surfaces an audio alert and a floating notification. You click it, answer
 The repo CLI also supports a resilient blocking workflow for terminal agents:
 
 ```bash
-agentboard input request --card <card-id> --prompt "Proceed?" --type yesno
-agentboard input list --status pending --card <card-id>
+agentboard input request --card card-142 --prompt "Proceed?" --type yesno
+agentboard input list --status pending --card card-142
 agentboard input get <request-id>
 agentboard input wait <request-id>
 ```
 
-`input request` now creates the request first and then waits by request id with a 5-second heartbeat, so terminal agents can often keep the same turn alive while still having a recovery path if the runtime interrupts the wait. Agents are expected to wait for an answer or for timeout after issuing the request, and they should prefer `choice` questions whenever the valid answers can be enumerated up front instead of falling back to free text. Use `--heartbeat 0` if a shell job or wrapper needs a quiet wait.
+`input request` now creates the request first and then waits by request id with a 5-second heartbeat, so terminal agents can often keep the same turn alive while preserving a recovery path if the runtime interrupts the wait. Agents are expected to wait for an answer or for timeout after issuing the request, and they should prefer `choice` questions whenever the valid answers can be enumerated up front instead of falling back to free text. Use `--heartbeat 0` if a shell job or wrapper needs a quiet wait.
 
 ---
 
@@ -167,16 +153,6 @@ Repos can have a `buildCommand` configured. For any feature with a repo and bran
 
 ---
 
-## Transition rules
-
-The admin panel's **Rules** tab lets you configure which agents can move cards to which statuses. Rules match agents by glob pattern (e.g. `implementer*`) and optionally restrict which status a card must currently be in.
-
-If no rules exist, all moves are permitted. Rules only apply when a card is moved with an `agentId` — UI moves are always allowed.
-
-Agents should call `GET /api/cards/:id/allowed-statuses?agentId=<id>` before patching status.
-
----
-
 ## Project structure
 
 ```
@@ -188,7 +164,7 @@ agent-board/
 │   │   ├── index.ts         # DB init, migrations, seeding
 │   │   └── schema.ts        # Drizzle table definitions + inferred types
 │   ├── routes/
-│   │   ├── cards.ts         # CRUD, claim, comments, dependencies, diff, merge, allowed-statuses
+│   │   ├── cards.ts         # CRUD, claim, comments, dependencies, diff, merge
 │   │   ├── statuses.ts
 │   │   ├── epics.ts
 │   │   ├── features.ts      # Commits, build trigger, build result
@@ -197,7 +173,6 @@ agent-board/
 │   │   ├── worktrees.ts
 │   │   ├── input.ts         # Long-poll user input
 │   │   ├── queue.ts         # Agent chat / message queue
-│   │   ├── transitionRules.ts
 │   │   ├── shortcuts.ts
 │   │   └── fs.ts            # Filesystem browser for path picker
 │   ├── types.ts             # Re-exports App + WorkflowType for client path alias
@@ -276,3 +251,4 @@ agent-board/
 **Migrations** — no migration runner. `initDb()` runs `CREATE TABLE IF NOT EXISTS` on every startup. New columns are added with `ALTER TABLE ... ADD COLUMN` in a try/catch (no-op if already present).
 
 **Server split** — `app.ts` builds and exports the Elysia app (and the `App` type). `index.ts` calls `.listen()`. This split lets the client import `App` via the `@server` path alias without pulling in Bun's native runtime modules.
+

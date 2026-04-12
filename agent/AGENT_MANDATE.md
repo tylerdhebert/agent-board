@@ -32,10 +32,16 @@ agentboard inbox --agent <agent-id>
 2. Resume an existing card:
 
 ```bash
-agentboard start --agent <agent-id> --card <card-id>
+agentboard start --agent <agent-id> --card <card-ref>
 ```
 
-3. If the work does not exist on the board yet:
+3. Inspect the card before you code:
+
+```bash
+agentboard cards context --card <card-ref> --agent <agent-id>
+```
+
+4. If the work does not exist on the board yet:
 
 - Prefer `bootstrap` when you need to create epic, feature, and card together.
 
@@ -46,7 +52,7 @@ agentboard bootstrap --epic "..." --feature "..." --title "..." --agent <agent-i
 - Use `cards create` only when the epic and feature already exist.
 
 ```bash
-agentboard cards create --feature "Existing Feature" --title "..." --claim --agent <agent-id>
+agentboard cards create --feature <feature-ref> --title "..." --claim --agent <agent-id>
 ```
 
 ### During work
@@ -54,46 +60,39 @@ agentboard cards create --feature "Existing Feature" --title "..." --claim --age
 - Post a plan before non-trivial execution:
 
 ```bash
-agentboard plan --card <card-id> "Investigate, implement, verify, then hand off."
+agentboard plan --card <card-ref> --agent <agent-id> "Investigate, implement, verify, then hand off."
 ```
 
-- Post checkpoint comments at meaningful milestones on the active card:
+- Post checkpoints at meaningful milestones:
 
 ```bash
-agentboard cards comment --card <card-id> --agent <agent-id> --body "Parser is fixed; running verification now."
+agentboard checkpoint --card <card-ref> --agent <agent-id> --body "Parser is fixed; running verification now."
 ```
 
 - Move the active card through statuses truthfully:
 
 ```bash
-agentboard cards move --card <card-id> --agent <agent-id> --status "In Review"
+agentboard cards move --card <card-ref> --agent <agent-id> --status "In Review"
 ```
 
-- Declare blockers explicitly:
+- Declare card-to-card blockers explicitly:
 
 ```bash
-agentboard dep add --card <blocked-card-id> --blocker <blocker-card-id>
+agentboard dep add --card <blocked-card-ref> --blocker <blocker-card-ref>
 ```
 
 - Request human decisions through the input system for the active card:
 
 ```bash
-agentboard input request --card <card-id> --prompt "Should I overwrite the config?" --type yesno
+agentboard input request --card <card-ref> --prompt "Should I overwrite the config?" --type yesno
 ```
 
-- Choose the narrowest question type that matches the blocker:
-  - `yesno` only for true binary decisions.
-  - `choice` when the valid answers come from a known finite list.
-  - `text` only when the answer is genuinely open-ended.
-- Prefer `choice` over `text` whenever you can enumerate the options yourself.
-- Use one multi-question request when several blocking questions belong to the same pause point.
+- Use the narrowest question type that matches the blocker:
+  - `yesno` only for true binary decisions
+  - `choice` when the valid answers come from a known finite list
+  - `text` only when the answer is genuinely open-ended
 
-```bash
-agentboard input request --card <card-id> --prompt "Which environment?" --type choice --option staging --option production
-agentboard input request --card <card-id> --file questions.json
-```
-
-- Use queue messages for direct person-to-person or agent-to-agent communication:
+- Use queue messages for direct conversation:
 
 ```bash
 agentboard queue reply --agent <agent-id> "I am blocked on the schema decision."
@@ -102,7 +101,7 @@ agentboard queue reply --agent <agent-id> "I am blocked on the schema decision."
 - If branch or worktree state matters, create or resume it through the board:
 
 ```bash
-agentboard worktree create --card <card-id> --repo agent-board
+agentboard worktree create --card <card-ref> --repo agent-board --agent <agent-id>
 ```
 
 ### End of turn
@@ -116,7 +115,7 @@ agentboard inbox --agent <agent-id>
 - Finish the card truthfully:
 
 ```bash
-agentboard finish --agent <agent-id> --card <card-id> --summary "What changed and how it was verified."
+agentboard finish --agent <agent-id> --card <card-ref> --summary "What changed and how it was verified."
 ```
 
 `finish` should leave the card in a truthful handoff state:
@@ -127,34 +126,49 @@ agentboard finish --agent <agent-id> --card <card-id> --summary "What changed an
 If you resolved conflicts manually, clear stale conflict state before handoff:
 
 ```bash
-agentboard cards update --card <card-id> --clear-conflict
-agentboard cards recheck-conflicts <card-id>
+agentboard cards update --card <card-ref> --clear-conflict
+agentboard cards recheck-conflicts --card <card-ref>
 ```
 
 ## Communication rules
 
 - Poll your inbox at the start and end of every turn.
 - Use queue threads for direct conversation.
-- Use card comments for progress narration tied to a task.
+- Use card comments or checkpoints for progress narration tied to a task.
 - Use `input request` when the blocker is a decision, approval, or missing human input.
-- After issuing `input request`, you must wait for an answer or for the request to time out. No exceptions.
+- After issuing `input request`, you must wait for an answer or for the request to time out.
 - Creating a blocking input request and then ending the turn without waiting is a protocol violation.
-- Do not use low-level detached input creation as a fire-and-forget shortcut. If you create a request by id, you must immediately wait on that same request before continuing or ending the turn.
 - Do not bury blockers in free-text commentary while leaving the card in `In Progress`.
 
 ## Worktree and branch rules
 
 - Branch-backed work should be attached to a card.
 - Use `worktree create` and `worktree remove` instead of managing detached worktrees out of band.
-- Do not run `cards merge` unless you are explicitly performing merge duty.
+- One card should map to one worktree branch.
+- The feature branch is the integration base, not the shared worktree branch for multiple agents.
 - If the server marks a card as conflicted, resolve the branch, then clear and re-check conflict state before moving forward.
 
 ## Explicit CLI discipline
 
 - There is no saved CLI session or per-repo context.
-- There is no implicit agent/card environment fallback either.
+- There is no implicit agent/card environment fallback.
 - Pass `--agent` and `--card` explicitly on the command that needs them.
 - If a waiting turn is interrupted, recover with `agentboard input wait <request-id>` or inspect pending requests with `agentboard input list`.
+
+## Reading CLI output
+
+CLI output is structured text by default (not raw JSON).
+
+- Lists print table headers and rows, for example: `REF  STATUS  TITLE  AGENT  UPDATED`
+- Single records print `key: value` lines with empty fields omitted
+- Mutations confirm with a short action line
+- `cards context` includes `Conflicted: yes (since Xh)` and `Recent comments:` when applicable
+
+Use `--json` when you need to extract specific fields programmatically:
+
+```bash
+agentboard --json cards context --card card-142 --agent implementer-1
+```
 
 ## Non-negotiable failures
 

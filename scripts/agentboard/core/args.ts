@@ -180,6 +180,88 @@ export function extractLeadingGlobalArgs(args: string[]): { globalArgs: string[]
   return { globalArgs: args.slice(0, index), remaining: args.slice(index) };
 }
 
+export function extractGlobalArgsAnywhere(
+  args: string[],
+  spec: Record<string, OptionSpec>
+): { globalArgs: string[]; remaining: string[] } {
+  const aliasMap = new Map<string, string>();
+  for (const [name, definition] of Object.entries(spec)) {
+    for (const alias of definition.alias ?? []) aliasMap.set(alias, name);
+  }
+
+  const globalArgs: string[] = [];
+  const remaining: string[] = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--") {
+      remaining.push(...args.slice(i));
+      break;
+    }
+
+    if (arg.startsWith("--no-")) {
+      const name = resolveOptionName(arg.slice(5), spec);
+      if (!name || spec[name].type !== "boolean") {
+        remaining.push(arg);
+        continue;
+      }
+      globalArgs.push(arg);
+      continue;
+    }
+
+    if (arg.startsWith("--")) {
+      const withoutPrefix = arg.slice(2);
+      const eqIndex = withoutPrefix.indexOf("=");
+      const rawName = eqIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, eqIndex);
+      const name = resolveOptionName(rawName, spec);
+      if (!name) {
+        remaining.push(arg);
+        continue;
+      }
+      const definition = spec[name];
+      if (definition.type === "boolean") {
+        globalArgs.push(arg);
+        continue;
+      }
+      if (eqIndex !== -1) {
+        globalArgs.push(arg);
+        continue;
+      }
+      const next = args[i + 1];
+      if (next === undefined) {
+        throw new CliError(`Option "--${name}" requires a value`);
+      }
+      globalArgs.push(arg, next);
+      i += 1;
+      continue;
+    }
+
+    if (arg.startsWith("-") && arg !== "-") {
+      const name = aliasMap.get(arg.slice(1));
+      if (!name) {
+        remaining.push(arg);
+        continue;
+      }
+      const definition = spec[name];
+      if (definition.type === "boolean") {
+        globalArgs.push(arg);
+        continue;
+      }
+      const next = args[i + 1];
+      if (next === undefined) {
+        throw new CliError(`Option "${arg}" requires a value`);
+      }
+      globalArgs.push(arg, next);
+      i += 1;
+      continue;
+    }
+
+    remaining.push(arg);
+  }
+
+  return { globalArgs, remaining };
+}
+
 export function readJsonFile<T>(filePath: string): T {
   return JSON.parse(readFileSync(path.resolve(filePath), "utf8")) as T;
 }

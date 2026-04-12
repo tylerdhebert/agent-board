@@ -21,12 +21,26 @@ agentboard queue conversations
 agentboard inbox --agent board-agent
 ```
 
+`queue conversations` output example:
+
+```text
+AGENT          UNREAD  LAST
+implementer-1  3       Fix the auth flow please
+```
+
 Review active work:
 
 ```bash
 agentboard cards list
 agentboard cards list --status "Blocked"
 agentboard cards list --status "In Progress"
+```
+
+`cards list` output example:
+
+```text
+REF      STATUS       TITLE                AGENT          UPDATED
+card-1   In Progress  Fix auth middleware  implementer-1  2m
 ```
 
 For cards needing intervention, inspect context:
@@ -77,45 +91,29 @@ agentboard worktree remove --repo agent-board --card card-142
 
 ### Base branch input protocol
 
-Before creating any worktree, always ask the user which branch to base it on.
+Base branch selection should be explicit when branch choice is risky or ambiguous.
+When the target base is clear, rely on normal `worktree create` defaults.
 
-**Determine the default** from the card's repo `baseBranch` field:
+Default base resolution order:
+
+- `--base <branch>` when provided
+- otherwise the repo's currently checked-out branch
+- otherwise the repo `baseBranch`
+
+Check context before creating a worktree:
 
 ```bash
 agentboard cards context --card card-142 --agent board-agent
 ```
 
-**Request input (blocking):**
+Ask for human input only when branch choice is not obvious or has elevated risk:
 
 ```bash
 agentboard input request --card card-142 \
   --prompt "Which branch should I base this worktree off? Default: dev" \
-  --type text
-```
-
-**If the user responds:** use their answer as `--base <response>`:
-
-```bash
+  --type text --timeout 300
 agentboard worktree create --card card-142 --repo agent-board --agent implementer-1 --base <response>
 ```
-
-**If the request times out with no response:**
-
-1. Pull the base branch to ensure it is fresh before branching off it:
-   ```bash
-   cd <repo-path> && git pull origin <baseBranch>
-   ```
-2. Create the worktree using the repo's `baseBranch`:
-   ```bash
-   agentboard worktree create --card card-142 --repo agent-board --agent implementer-1 --base <baseBranch>
-   ```
-3. Post a comment noting what happened:
-   ```bash
-   agentboard cards comment card-142 --agent board-agent \
-     --body "Worktree base branch request timed out — pulled and branched off <baseBranch>."
-   ```
-
-Do not skip the input request. Do not silently default.
 
 ## Status discipline
 
@@ -146,10 +144,11 @@ agentboard queue send \
   --author board-agent
 ```
 
-After dispatching, monitor the card. When `conflictedAt` is cleared and `handoffSummary` is set, the resolver is done. Advance the card to the appropriate next status:
+After dispatching, monitor the card with `cards context`. When the output no longer includes `Conflicted:` and shows `Handoff:` set, the resolver is done. Advance the card to the appropriate next status:
 
 ```bash
-agentboard cards move card-142 --agent board-agent --to "In Review"
+agentboard cards move --card card-142 --agent board-agent --to "In Review"
 ```
 
 Do not clear conflicts or attempt resolution yourself — that is the conflict resolver's job.
+

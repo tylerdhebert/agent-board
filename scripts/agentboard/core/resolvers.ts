@@ -1,5 +1,5 @@
 import { CliError } from "./errors";
-import { exactMatch, findByNormalizedName, toQueryString } from "./helpers";
+import { exactMatch } from "./helpers";
 import type { Card, CommandState, Epic, Feature, Repo, Status, Workflow } from "./types";
 
 export async function loadStatuses(state: CommandState) {
@@ -39,7 +39,7 @@ export async function resolveStatusId(state: CommandState, value: string) {
 
 export async function maybeResolveStatusId(state: CommandState, value: string) {
   const statuses = await loadStatuses(state);
-  return findByNormalizedName(statuses, value, [(item) => item.id, (item) => item.name])?.id ?? null;
+  return statuses.find((item) => item.id.toLowerCase() === value.toLowerCase() || item.name.toLowerCase() === value.toLowerCase())?.id ?? null;
 }
 
 export async function resolveEpicId(state: CommandState, value: string) {
@@ -49,18 +49,18 @@ export async function resolveEpicId(state: CommandState, value: string) {
 
 export async function resolveFeatureId(state: CommandState, value: string) {
   const features = await loadFeatures(state);
-  return exactMatch(features, value, "feature", [(item) => item.id, (item) => item.title]).id;
+  return exactMatch(features, value, "feature", [(item) => item.id, (item) => item.ref, (item) => item.title]).id;
 }
 
 export async function resolveCardRecord(state: CommandState, value: string) {
   const cards = await loadCards(state);
-  return exactMatch(cards, value, "card", [(item) => item.id, (item) => item.title]);
+  return exactMatch(cards, value, "card", [(item) => item.id, (item) => item.ref, (item) => item.title]);
 }
 
 export async function resolveCardId(state: CommandState, explicit?: string) {
   const candidate = explicit;
   if (!candidate) {
-    throw new CliError("No card specified. Pass --card or use a positional card argument.");
+    throw new CliError("No card specified. Pass --card with a card ref or id, or use a positional card argument.");
   }
   return (await resolveCardRecord(state, candidate)).id;
 }
@@ -86,23 +86,6 @@ export function resolveAgentId(state: CommandState, explicit?: string, required 
 export async function getCard(state: CommandState, explicit?: string) {
   const cardId = await resolveCardId(state, explicit);
   return state.client.request<Card & { comments?: unknown[] }>("GET", `/cards/${encodeURIComponent(cardId)}`);
-}
-
-export async function maybeEnsureAllowedStatus(
-  state: CommandState,
-  cardId: string,
-  statusId: string,
-  agentId: string | null
-) {
-  if (!agentId) return;
-  const allowed = await state.client.request<Status[]>(
-    "GET",
-    `/cards/${encodeURIComponent(cardId)}/allowed-statuses${toQueryString({ agentId })}`
-  );
-  if (allowed.some((status) => status.id === statusId)) return;
-  const targetStatus = (await loadStatuses(state)).find((status) => status.id === statusId)?.name ?? statusId;
-  const allowedNames = allowed.map((status) => status.name).join(", ") || "(none)";
-  throw new CliError(`Agent "${agentId}" cannot move this card to "${targetStatus}". Allowed statuses: ${allowedNames}`);
 }
 
 export async function postAgentComment(state: CommandState, cardId: string, agentId: string, body: string) {

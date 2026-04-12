@@ -18,9 +18,6 @@
  *   // 2. Claim the card assigned to this agent
  *   const card = await board.claimCard(cardId, AGENT_ID, true);
  *
- *   // 3. Check allowed transitions before moving status
- *   const allowed = await board.getAllowedStatuses(card.id, AGENT_ID);
- *
  *   // 4. Work — post comments at each decision point
  *   await board.addComment(card.id, 'Starting implementation...');
  *
@@ -29,10 +26,10 @@
  *     { id: 'proceed', type: 'yesno', prompt: 'Proceed with the breaking migration?' },
  *   ]);
  *
- *   // 6. Move to Ready to Merge when done (triggersMerge status auto-checks conflicts)
- *   await board.updateCard(card.id, { statusId: readyToMergeId, agentId: AGENT_ID });
+ *   // 6. Move to Done when the work is complete
+ *   await board.updateCard(card.id, { statusId: doneStatusId, agentId: AGENT_ID });
  *
- *   // 7. Check for conflicts after moving to a triggersMerge status
+ *   // 7. Check the card again if you need final state
  *   const updated = await board.getCard(card.id);
  *   if (updated.conflictedAt) {
  *     // rebase your branch, then clear the flag and re-trigger the check
@@ -104,13 +101,6 @@ export interface Comment {
 }
 
 export interface Status {
-  id: string;
-  name: string;
-  color: string;
-  position: number;
-}
-
-export interface AllowedStatus {
   id: string;
   name: string;
   color: string;
@@ -218,7 +208,7 @@ export interface UpdateCardOptions {
   status?: string;
   /** Status ID directly, takes precedence over status. */
   statusId?: string;
-  /** Agent ID to associate with this card. Include when changing status so transition rules are enforced. */
+  /** Agent ID to associate with this card when recording the actor making the change. */
   agentId?: string;
   /** Set to null to clear a merge conflict after rebasing. */
   conflictedAt?: null;
@@ -379,28 +369,12 @@ export async function claimCard(
 }
 
 /**
- * Get the statuses this agent is allowed to move a card to from its current status.
- *
- * Always check this before patching status to avoid rejected moves.
- *
- * @param cardId  - Card ID.
- * @param agentId - Your agent ID (used to evaluate transition rules).
- */
-export async function getAllowedStatuses(
-  cardId: string,
-  agentId: string
-): Promise<AllowedStatus[]> {
-  return fetchJson<AllowedStatus[]>(
-    `/api/cards/${cardId}/allowed-statuses?agentId=${encodeURIComponent(agentId)}`
-  );
-}
-
 /**
  * Update a card's fields.
  *
  * Pass status (name) or statusId when changing status. Include agentId when
- * changing status so transition rules are enforced. Set conflictedAt: null
- * to clear a merge conflict after rebasing.
+ * recording which agent moved the card. Set conflictedAt: null to clear a
+ * merge conflict after rebasing.
  *
  * @param id   - Card ID.
  * @param opts - Fields to update (all optional).
@@ -722,8 +696,7 @@ export async function getRepos(): Promise<Repo[]> {
 /**
  * List all workflows.
  *
- * Two are seeded by default: a Default workflow and a Worktree workflow
- * (which includes a "Ready to Merge" status with triggersMerge: true).
+ * Two are seeded by default: a Default workflow and a Worktree workflow.
  */
 export async function getWorkflows(): Promise<Workflow[]> {
   return fetchJson<Workflow[]>("/api/workflows");

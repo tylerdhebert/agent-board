@@ -1,4 +1,4 @@
-import { extractLeadingGlobalArgs, parseFlags } from "./core/args";
+import { extractGlobalArgsAnywhere, extractLeadingGlobalArgs, parseFlags } from "./core/args";
 import { AgentBoardClient } from "./core/client";
 import { DEFAULT_BASE_URL } from "./core/constants";
 import { ApiError, CliError } from "./core/errors";
@@ -7,15 +7,20 @@ import { runCommand } from "./run";
 import type { CommandState, GlobalOptions } from "./core/types";
 
 export async function main(argv = process.argv.slice(2)) {
+  let global: GlobalOptions = {};
   try {
-    const { globalArgs, remaining } = extractLeadingGlobalArgs(argv);
-    const parsedGlobal = parseFlags(globalArgs, {
+    const { globalArgs: leadingGlobalArgs, remaining: argsAfterLeadingGlobals } = extractLeadingGlobalArgs(argv);
+    const { globalArgs: anyPositionGlobalArgs, remaining } = extractGlobalArgsAnywhere(argsAfterLeadingGlobals, {
+      url: { type: "string" },
+      json: { type: "boolean" },
+    });
+    const parsedGlobal = parseFlags([...leadingGlobalArgs, ...anyPositionGlobalArgs], {
       url: { type: "string" },
       json: { type: "boolean" },
       help: { type: "boolean", alias: ["h"] },
     });
 
-    const global: GlobalOptions = {
+    global = {
       url: parsedGlobal.values.url as string | undefined,
       json: parsedGlobal.values.json as boolean | undefined,
       help: parsedGlobal.values.help as boolean | undefined,
@@ -32,7 +37,7 @@ export async function main(argv = process.argv.slice(2)) {
     };
 
     const result = await runCommand(state, remaining);
-    print(result);
+    print(result, { json: global.json });
   } catch (error) {
     if (error instanceof ApiError) {
       print({
@@ -41,19 +46,19 @@ export async function main(argv = process.argv.slice(2)) {
         method: error.method,
         path: error.requestPath,
         responseBody: error.responseBody,
-      });
+      }, { json: global.json });
       process.exit(error.exitCode);
     }
 
     if (error instanceof CliError) {
-      print({ error: error.message });
+      print({ error: error.message }, { json: global.json });
       process.exit(error.exitCode);
     }
 
     print({
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
-    });
+    }, { json: global.json });
     process.exit(1);
   }
 }

@@ -2,7 +2,7 @@ import { helpText } from "./help";
 import { handleCard, handleDependencies } from "./commands/cards";
 import { handleInput, handleQueue } from "./commands/communication";
 import { handleHealth, handleRaw } from "./commands/core";
-import { handleEpic, handleFeature, handleRepo, handleRule, handleStatus, handleWorkflow, handleWorktree } from "./commands/admin";
+import { handleEpic, handleFeature, handleRepo, handleStatus, handleWorkflow, handleWorktree } from "./commands/admin";
 import { handleBootstrap, handleCheckpoint, handleFinish, handlePlan, handleStart } from "./commands/taskflow";
 import { CliError } from "./core/errors";
 import type { CommandState } from "./core/types";
@@ -55,9 +55,6 @@ export async function runCommand(state: CommandState, args: string[]) {
     case "workflows":
     case "workflow":
       return handleWorkflow(state, rest);
-    case "rules":
-    case "rule":
-      return handleRule(state, rest);
     case "worktrees":
     case "worktree":
       return handleWorktree(state, rest);

@@ -189,6 +189,16 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
   const currentStatusId = selectedStatusId ?? card?.statusId;
   const currentStatus = statuses.find((s) => s.id === currentStatusId);
   const cardStatus = statuses.find((s) => s.id === card?.statusId);
+  const statusOptions = (() => {
+    if (!workflowStatuses || workflowStatuses.length === 0) return statuses;
+    const inWorkflow = workflowStatuses
+      .map((ws) => statuses.find((status) => status.id === ws.statusId))
+      .filter((status): status is Status => Boolean(status));
+    if (!cardStatus) return inWorkflow;
+    return inWorkflow.some((status) => status.id === cardStatus.id)
+      ? inWorkflow
+      : [cardStatus, ...inWorkflow];
+  })();
   const isReadyToMerge = workflowStatuses
     ? workflowStatuses.some((ws) => ws.statusId === card?.statusId && ws.triggersMerge)
     : cardStatus?.name.toLowerCase() === "ready to merge";
@@ -397,7 +407,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
                           onChange={handleStatusChange}
                           className="field-shell w-full cursor-pointer px-3 py-3 text-xs"
                         >
-                          {statuses.map((s) => (
+                          {statusOptions.map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.name}
                             </option>

@@ -10,23 +10,52 @@ import type { InferSelectModel } from "drizzle-orm";
 
 type InputRequestRecord = InferSelectModel<typeof inputRequests>;
 
-function restorePreviousStatus(cardId: string, previousStatusId: string | null | undefined) {
-  if (!previousStatusId) return;
+function buildBlockedReasonSummary(prompts: string[]) {
+  if (prompts.length === 0) return null;
+  return prompts.length === 1
+    ? `Waiting for input: ${prompts[0]}`
+    : `Waiting for input: ${prompts[0]} (+${prompts.length - 1} more)`;
+}
 
-  const blockedStatus = db
+function getBlockedStatusId() {
+  return db
     .select()
     .from(statuses)
     .where(eq(statuses.name, "Blocked"))
-    .get();
+    .get()?.id ?? null;
+}
 
-  if (!blockedStatus || previousStatusId === blockedStatus.id) return;
+function resolvePreviousStatusIdForNewRequest(cardId: string, cardStatusId: string, blockedStatusId: string | null) {
+  if (!blockedStatusId || cardStatusId !== blockedStatusId) {
+    return cardStatusId;
+  }
+
+  const pendingForCard = db
+    .select()
+    .from(inputRequests)
+    .where(and(eq(inputRequests.cardId, cardId), eq(inputRequests.status, "pending")))
+    .all();
+
+  const inherited = pendingForCard.find(
+    (request) => request.previousStatusId && request.previousStatusId !== blockedStatusId
+  );
+
+  return inherited?.previousStatusId ?? null;
+}
+
+function restorePreviousStatus(cardId: string, previousStatusId: string | null | undefined) {
+  if (!previousStatusId) return;
+
+  const blockedStatusId = getBlockedStatusId();
+
+  if (!blockedStatusId || previousStatusId === blockedStatusId) return;
 
   const card = db.select().from(cards).where(eq(cards.id, cardId)).get();
-  if (!card || card.statusId !== blockedStatus.id) return;
+  if (!card || card.statusId !== blockedStatusId) return;
 
   const updatedAt = nowIso();
   db.update(cards)
-    .set({ statusId: previousStatusId, updatedAt })
+    .set({ statusId: previousStatusId, blockedReason: null, updatedAt })
     .where(eq(cards.id, cardId))
     .run();
 
@@ -39,6 +68,17 @@ function restorePreviousStatus(cardId: string, previousStatusId: string | null |
   if (updatedCard) {
     wsManager.broadcast("card:updated", updatedCard);
   }
+}
+
+function maybeRestoreCardAfterInputResolution(cardId: string, previousStatusId: string | null | undefined) {
+  const stillPending = db
+    .select()
+    .from(inputRequests)
+    .where(and(eq(inputRequests.cardId, cardId), eq(inputRequests.status, "pending")))
+    .all();
+
+  if (stillPending.length > 0) return;
+  restorePreviousStatus(cardId, previousStatusId);
 }
 
 function serializeInputRequest(record: typeof inputRequests.$inferSelect) {
@@ -78,7 +118,7 @@ function markRequestTimedOut(request: InputRequestRecord) {
     .where(eq(inputRequests.id, request.id))
     .run();
 
-  restorePreviousStatus(request.cardId, request.previousStatusId);
+  maybeRestoreCardAfterInputResolution(request.cardId, request.previousStatusId);
   wsManager.broadcast("input:timed_out", { requestId: request.id, cardId: request.cardId });
   return true;
 }
@@ -148,11 +188,12 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         return { error: "Card not found" };
       }
 
-      const blockedStatus = db
-        .select()
-        .from(statuses)
-        .where(eq(statuses.name, "Blocked"))
-        .get();
+      const blockedStatusId = getBlockedStatusId();
+      const previousStatusId = resolvePreviousStatusIdForNewRequest(
+        cardId,
+        card.statusId,
+        blockedStatusId
+      );
 
       const requestId = randomUUID();
       const now = nowIso();
@@ -160,7 +201,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         .values({
           id: requestId,
           cardId,
-          previousStatusId: card.statusId,
+          previousStatusId,
           questions: JSON.stringify(questions),
           answers: null,
           status: "pending",
@@ -169,9 +210,13 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         })
         .run();
 
-      if (blockedStatus) {
+      if (blockedStatusId) {
+        const blockedReason =
+          card.statusId === blockedStatusId
+            ? card.blockedReason
+            : buildBlockedReasonSummary(questions.map((question) => question.prompt));
         db.update(cards)
-          .set({ statusId: blockedStatus.id, updatedAt: nowIso() })
+          .set({ statusId: blockedStatusId, blockedReason, updatedAt: nowIso() })
           .where(eq(cards.id, cardId))
           .run();
         const updatedCard = db
@@ -185,7 +230,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
       const request = {
         id: requestId,
         cardId,
-        previousStatusId: card.statusId,
+        previousStatusId,
         questions,
         answers: null,
         status: "pending",
@@ -208,7 +253,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
               .set({ status: "timed_out" })
               .where(eq(inputRequests.id, requestId))
               .run();
-            restorePreviousStatus(cardId, card.statusId);
+            maybeRestoreCardAfterInputResolution(cardId, previousStatusId);
             wsManager.broadcast("input:timed_out", { requestId, cardId });
           }
         );
@@ -275,7 +320,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         .where(eq(inputRequests.id, params.id))
         .run();
 
-      restorePreviousStatus(request.cardId, request.previousStatusId);
+      maybeRestoreCardAfterInputResolution(request.cardId, request.previousStatusId);
 
       const resolved = pollRegistry.answer(params.id, body.answers);
 

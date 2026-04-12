@@ -7,7 +7,6 @@ import { MoveSection } from "./admin/MoveSection";
 import { StatusesSection } from "./admin/StatusesSection";
 import { EpicsSection } from "./admin/EpicsSection";
 import { FeaturesSection } from "./admin/FeaturesSection";
-import { RulesSection } from "./admin/RulesSection";
 import { DangerSection } from "./admin/DangerSection";
 import { ShortcutsSection } from "./admin/ShortcutsSection";
 import { ReposSection } from "./admin/ReposSection";
@@ -19,7 +18,6 @@ type Section =
   | "statuses"
   | "epics"
   | "features"
-  | "rules"
   | "shortcuts"
   | "repos"
   | "workflows"
@@ -39,7 +37,6 @@ export function AdminPanel() {
     "features",
     "cards",
     "move",
-    "rules",
     "shortcuts",
   ];
 
@@ -99,7 +96,6 @@ export function AdminPanel() {
           {activeSection === "statuses" && <StatusesSection />}
           {activeSection === "epics" && <EpicsSection />}
           {activeSection === "features" && <FeaturesSection />}
-          {activeSection === "rules" && <RulesSection />}
           {activeSection === "shortcuts" && <ShortcutsSection />}
           {activeSection === "repos" && <ReposSection />}
           {activeSection === "workflows" && <WorkflowsSection />}

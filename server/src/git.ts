@@ -21,3 +21,11 @@ export function git(
 export function worktreePath(repoPath: string, branchName: string): string {
   return join(repoPath, "..", ".git-worktrees", branchName);
 }
+
+export function currentCheckedOutBranch(repoPath: string): string | null {
+  const result = git(["rev-parse", "--abbrev-ref", "HEAD"], repoPath);
+  if (result.exitCode !== 0) return null;
+  const branch = result.stdout.trim();
+  if (!branch || branch === "HEAD") return null;
+  return branch;
+}

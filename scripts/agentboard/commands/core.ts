@@ -21,7 +21,9 @@ function parseQueryFlags(entries: string[] | undefined) {
 }
 
 export async function handleHealth(state: CommandState) {
-  return state.client.request("GET", "/health");
+  const result = await state.client.request("GET", "/health") as Record<string, unknown>;
+  const version = result.version ? ` (${String(result.version)})` : "";
+  return { __render: "action", data: { message: `OK${version}` } };
 }
 
 export async function handleRaw(state: CommandState, args: string[]) {

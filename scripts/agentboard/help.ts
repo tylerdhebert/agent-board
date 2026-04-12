@@ -16,6 +16,7 @@ CLI-first interface for the running agent-board server.
 Global options:
   --url <url>       Override board URL (default: ${DEFAULT_BASE_URL})
   --json            Force JSON output
+  (Global options can be placed before or after the command.)
 
 Top-level commands:
   help
@@ -25,8 +26,8 @@ Top-level commands:
   plan --card <card> --agent <id> "..."
   checkpoint --card <card> --agent <id> --body "..."
   finish --card <card> --agent <id> [--summary "..."] [--status "Done|Ready to Merge"]
-  bootstrap --epic "..." --feature "..." --title "..." [--agent <id>]
-  inbox [--agent <id>] [--status pending|read] [--all] [--mark-read]
+  bootstrap --epic "..." --feature "..." --title "..." [--agent <id>] [--claim|--no-claim]
+  inbox --agent <id> [--status pending|read] [--all] [--mark-read]
 
 Resource commands:
   cards help
@@ -56,7 +57,10 @@ Examples:
   agentboard raw GET /health
   agentboard raw GET /queue --query agentId=implementer-1 --query status=pending
   agentboard raw POST /queue --body-file request.json
-  agentboard raw POST /queue --body-json '{"agentId":"orchestrator","body":"Need input","author":"user"}'`
+  agentboard raw POST /queue --body-json '{"agentId":"orchestrator","body":"Need input","author":"user"}'
+
+Tip:
+  On Windows/PowerShell, prefer --body-file for POST/PATCH payloads to avoid quoting issues.`
     );
   }
 
@@ -108,7 +112,11 @@ Completes the specified card, choosing "Ready to Merge" automatically for branch
         `Usage:
   agentboard bootstrap --epic "..." --feature "..." --title "..." [--description "..."] [--repo <repo>] [--branch <branch>] [--agent <id>] [--claim|--no-claim]
 
-Creates missing epic/feature scaffolding, then creates a card and can immediately claim it.`
+Creates missing epic/feature scaffolding, then creates a card.
+Claim behavior:
+  - with --claim, bootstrap claims the card (requires --agent)
+  - with --no-claim, bootstrap leaves the card unclaimed
+  - with neither flag, bootstrap claims only when --agent is provided.`
       );
   }
 }
@@ -133,17 +141,17 @@ Aliases:
     "agentboard cards",
     `Usage:
   agentboard cards list [--status <status>] [--epic <epic>] [--feature <feature>] [--agent <id> | --mine]
-  agentboard cards get <card>
-  agentboard cards context <card> [--agent <id>]
+  agentboard cards get --card <card> [--agent <id>]
+  agentboard cards context --card <card> [--agent <id>]
   agentboard cards create --title "..." --feature <feature> [--status <status>] [--agent <id>] [--claim]
-  agentboard cards claim <card> [--agent <id>] [--no-auto-advance]
-  agentboard cards move <card> --to "<status>" [--agent <id>]
-  agentboard cards update <card> [--title ...] [--description ...] [--status ...] [--feature ...] [--epic ...] [--type ...] [--plan ...] [--latest-update ...] [--handoff-summary ...] [--blocked-reason ...]
-  agentboard cards comment <card> --agent <id> --body "..." [--author agent|user]
-  agentboard cards diff <card>
-  agentboard cards merge <card> [--strategy <strategy>] [--target <branch>]
-  agentboard cards recheck-conflicts <card>
-  agentboard cards delete <card>
+  agentboard cards claim --card <card> [--agent <id>] [--no-auto-advance]
+  agentboard cards move --card <card> --to "<status>" [--agent <id>]
+  agentboard cards update --card <card> [--title ...] [--description ...] [--status ...] [--feature ...] [--epic ...] [--type ...] [--plan ...] [--latest-update ...] [--handoff-summary ...] [--blocked-reason ...]
+  agentboard cards comment --card <card> --agent <id> --body "..."
+  agentboard cards diff --card <card>
+  agentboard cards merge --card <card> [--strategy <strategy>] [--target <branch>]
+  agentboard cards recheck-conflicts --card <card>
+  agentboard cards delete --card <card>
   agentboard cards completed-today
   agentboard cards deps help`
   );
@@ -157,8 +165,8 @@ export function communicationHelp(topic: "input" | "queue") {
   agentboard input list [--status pending|answered|timed_out] [--card <card>]
   agentboard input get <requestId>
   agentboard input wait <requestId> [--timeout <secs>] [--poll-interval <secs>] [--heartbeat <secs>]
-  agentboard input request <card> --prompt "..." [--type text|yesno|choice] [--option "..."] [--default "..."] [--timeout <secs>] [--poll-interval <secs>] [--heartbeat <secs>]
-  agentboard input request <card> --file questions.json
+  agentboard input request --card <card> --prompt "..." [--type text|yesno|choice] [--option "..."] [--default "..."] [--timeout <secs>] [--poll-interval <secs>] [--heartbeat <secs>]
+  agentboard input request --card <card> --file questions.json
   agentboard input answer <requestId> --answers-json '{"q1":"yes"}'
   agentboard input answer <requestId> --answer q1=yes --answer q2=no`
     );
@@ -168,11 +176,11 @@ export function communicationHelp(topic: "input" | "queue") {
     "agentboard queue",
     `Usage:
   agentboard queue conversations
-  agentboard queue inbox [--agent <id>] [--status pending|read] [--all] [--mark-read]
+  agentboard queue inbox --agent <id> [--status pending|read] [--all] [--mark-read]
   agentboard queue send --agent <id> --body "..." [--author <id|user>]
   agentboard queue reply --agent <id> "..."
   agentboard queue read <messageId>
-  agentboard queue read-all [--agent <id>]
+  agentboard queue read-all --agent <id>
   agentboard queue delete <messageId>
   agentboard queue clear-conversation --agent <id>`
   );
@@ -237,8 +245,8 @@ export function adminHelp(topic: "status" | "epic" | "feature" | "repo" | "workf
       return section(
         "agentboard worktree",
         `Usage:
-  agentboard worktree create <card> --repo <repo> [--agent <id>] [--branch <branch>] [--base <branch>]
-  agentboard worktree remove <branch> --repo <repo>
+  agentboard worktree create --card <card> --repo <repo> [--agent <id>] [--branch <branch>] [--base <branch>]
+  agentboard worktree remove --branch <branch> --repo <repo>
   agentboard worktree remove --card <card> --repo <repo>
 
 Branch selection order:

@@ -5,8 +5,10 @@ This directory holds the reusable agent instruction documents for this repo:
 - `AGENT_CLI.md`
 - `AGENT_MANDATE.md`
 - `AGENT_API.md`
+- `ORCHESTRATOR.md`
+- `BOARD_AGENT.md`
 
-Use the helper scripts in `scripts/` to symlink those three files into another directory without copying them.
+Use the helper scripts in `scripts/` to symlink those files into another directory without copying them.
 
 Notes:
 

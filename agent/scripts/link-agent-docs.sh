@@ -22,6 +22,8 @@ files=(
   "AGENT_CLI.md"
   "AGENT_MANDATE.md"
   "AGENT_API.md"
+  "ORCHESTRATOR.md"
+  "BOARD_AGENT.md"
 )
 
 for file in "${files[@]}"; do

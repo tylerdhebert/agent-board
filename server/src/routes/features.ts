@@ -8,17 +8,19 @@ import { wsManager } from "../wsManager";
 import { git, worktreePath } from "../git";
 import { nowIso, updateAndBroadcast } from "../helpers/db";
 import { parseCommitLog, parseCommitDetail } from "../helpers/git";
+import { serializeFeature } from "../helpers/presenters";
+import { nextFeatureRefNum } from "../db";
 
 export const featureRoutes = new Elysia({ prefix: "/features" })
   .get("/", () => {
-    return db.select().from(features).all();
+    return db.select().from(features).all().map(serializeFeature);
   })
   .post(
     "/",
     ({ body }) => {
       const id = randomUUID();
       const now = nowIso();
-      const row = { id, ...body, createdAt: now, updatedAt: now };
+      const row = { id, refNum: nextFeatureRefNum(), ...body, createdAt: now, updatedAt: now };
       db.insert(features).values(row).run();
       const created = db
         .select()
@@ -26,7 +28,7 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
         .where(eq(features.id, id))
         .get()!;
       wsManager.broadcast("feature:created", created);
-      return created;
+      return serializeFeature(created);
     },
     {
       body: t.Object({
@@ -42,7 +44,8 @@ export const featureRoutes = new Elysia({ prefix: "/features" })
   .patch(
     "/:id",
     ({ params, body }) => {
-      return updateAndBroadcast(features, params.id, body, "feature:updated");
+      const updated = updateAndBroadcast(features, params.id, body, "feature:updated");
+      return serializeFeature(updated);
     },
     {
       params: t.Object({ id: t.String() }),

@@ -16,7 +16,9 @@ $destinationDir = (Resolve-Path -LiteralPath $Destination).Path
 $files = @(
     "AGENT_CLI.md",
     "AGENT_MANDATE.md",
-    "AGENT_API.md"
+    "AGENT_API.md",
+    "ORCHESTRATOR.md",
+    "BOARD_AGENT.md"
 )
 
 foreach ($file in $files) {

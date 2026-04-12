@@ -4,7 +4,7 @@ import {
   getCard,
   loadEpics,
   loadFeatures,
-  maybeEnsureAllowedStatus,
+  loadStatuses,
   maybeResolveStatusId,
   postAgentComment,
   resolveAgentId,
@@ -37,6 +37,10 @@ export async function handleStart(state: CommandState, args: string[]) {
   });
 
   if (typeof parsed.values.plan === "string") {
+    await state.client.request("PATCH", `/cards/${encodeURIComponent(cardId)}`, {
+      plan: parsed.values.plan,
+      latestUpdate: parsed.values.plan,
+    });
     await postAgentComment(state, cardId, agentId, parsed.values.plan);
   }
 
@@ -47,7 +51,16 @@ export async function handleStart(state: CommandState, args: string[]) {
         `/queue${toQueryString({ agentId, status: "pending" })}`
       );
 
-  return { claimed, inbox };
+  const statuses = await loadStatuses(state);
+  return {
+    __render: "taskflow",
+    data: {
+      action: "Started",
+      card: claimed,
+      statusName: statuses.find((status) => status.id === claimed.statusId)?.name ?? claimed.statusId,
+      inboxCount: inbox.length,
+    },
+  };
 }
 
 export async function handleCheckpoint(state: CommandState, args: string[]) {
@@ -63,12 +76,16 @@ export async function handleCheckpoint(state: CommandState, args: string[]) {
   const cardId = await resolveCardId(state, parsed.values.card as string | undefined);
   const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
   const body = requireString(parsed.values, "body");
-  return postAgentComment(state, cardId, agentId, body);
+  await state.client.request("PATCH", `/cards/${encodeURIComponent(cardId)}`, {
+    latestUpdate: body,
+  });
+  await postAgentComment(state, cardId, agentId, body);
+  return { __render: "action", data: { message: `Checkpoint posted on ${parsed.values.card as string | undefined ?? cardId}` } };
 }
 
 export async function handlePlan(state: CommandState, args: string[]) {
   if (wantsScopedHelp(args)) {
-    return taskflowHelp("checkpoint");
+    return taskflowHelp("plan");
   }
 
   const parsed = parseFlags(args, {
@@ -85,7 +102,11 @@ export async function handlePlan(state: CommandState, args: string[]) {
   if (!body) {
     throw new CliError('Usage: agentboard plan --card <card> "Plan text..."');
   }
-  return postAgentComment(state, cardId, agentId, body);
+  await state.client.request("PATCH", `/cards/${encodeURIComponent(cardId)}`, {
+    plan: body,
+  });
+  await postAgentComment(state, cardId, agentId, body);
+  return { __render: "action", data: { message: `Plan set on ${parsed.values.card as string | undefined ?? cardId}` } };
 }
 
 export async function handleFinish(state: CommandState, args: string[]) {
@@ -104,6 +125,15 @@ export async function handleFinish(state: CommandState, args: string[]) {
   const cardId = card.id;
   const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
 
+  const patchBody: Record<string, string | null> = {};
+  if (typeof parsed.values.summary === "string") {
+    patchBody.handoffSummary = parsed.values.summary;
+    patchBody.latestUpdate = parsed.values.summary;
+  }
+  if (Object.keys(patchBody).length > 0) {
+    await state.client.request("PATCH", `/cards/${encodeURIComponent(cardId)}`, patchBody);
+  }
+
   if (!boolValue(parsed.values, "noComment") && typeof parsed.values.summary === "string") {
     await postAgentComment(state, cardId, agentId, parsed.values.summary);
   }
@@ -117,7 +147,6 @@ export async function handleFinish(state: CommandState, args: string[]) {
     explicitStatus
       ? await resolveStatusId(state, explicitStatus)
       : defaultBranchStatus ?? await resolveStatusId(state, "Done");
-  await maybeEnsureAllowedStatus(state, cardId, statusId, agentId);
 
   const updated = await state.client.request<Card>("PATCH", `/cards/${encodeURIComponent(cardId)}`, {
     statusId,
@@ -128,7 +157,16 @@ export async function handleFinish(state: CommandState, args: string[]) {
     `/queue${toQueryString({ agentId, status: "pending" })}`
   );
 
-  return { card: updated, inbox };
+  const statuses = await loadStatuses(state);
+  return {
+    __render: "taskflow",
+    data: {
+      action: "Finished",
+      card: updated,
+      statusName: statuses.find((status) => status.id === updated.statusId)?.name ?? updated.statusId,
+      inboxCount: inbox.length,
+    },
+  };
 }
 
 export async function handleBootstrap(state: CommandState, args: string[]) {
@@ -159,6 +197,23 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
   const featureTitle = requireString(parsed.values, "feature");
   const cardTitle = requireString(parsed.values, "title");
   const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
+  const explicitClaim = boolValue(parsed.values, "claim");
+  const explicitNoClaim = boolValue(parsed.values, "noClaim");
+
+  if (explicitClaim && explicitNoClaim) {
+    throw new CliError("bootstrap accepts either --claim or --no-claim, not both.");
+  }
+
+  const shouldClaim =
+    explicitClaim
+      ? true
+      : explicitNoClaim
+        ? false
+        : Boolean(agentId);
+
+  if (shouldClaim && !agentId) {
+    throw new CliError("bootstrap needs an agent id to claim the new card. Pass --agent or --no-claim.");
+  }
 
   const statusName = (parsed.values.status as string | undefined) ?? "To Do";
   const statusId = await resolveStatusId(state, statusName);
@@ -175,8 +230,10 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
       : undefined;
 
   const epics = await loadEpics(state);
+  let epicCreated = false;
   let epic = epics.find((item) => normalizeString(item.title) === normalizeString(epicTitle));
   if (!epic) {
+    epicCreated = true;
     epic = await state.client.request<Epic>("POST", "/epics", {
       title: epicTitle,
       description: (parsed.values.epicDescription as string | undefined) ?? "",
@@ -187,12 +244,14 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
   }
 
   const features = await loadFeatures(state);
+  let featureCreated = false;
   let feature = features.find(
     (item) =>
       item.epicId === epic!.id
       && normalizeString(item.title) === normalizeString(featureTitle)
   );
   if (!feature) {
+    featureCreated = true;
     feature = await state.client.request<Feature>("POST", "/features", {
       epicId: epic.id,
       title: featureTitle,
@@ -211,23 +270,33 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
     type: parsed.values.type as string,
     description: (parsed.values.description as string | undefined) ?? "",
     agentId: agentId ?? undefined,
+    plan: typeof parsed.values.plan === "string" ? parsed.values.plan : undefined,
   });
   state.cache.cards = undefined;
 
-  const shouldClaim = boolValue(parsed.values, "noClaim") ? false : parsed.values.claim !== false;
-
   if (shouldClaim) {
-    if (!agentId) {
-      throw new CliError("bootstrap needs an agent id to claim the new card. Pass --agent or --no-claim.");
-    }
     card = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(card.id)}/claim`, {
       agentId,
       autoAdvance: !boolValue(parsed.values, "noAutoAdvance"),
     });
     if (typeof parsed.values.plan === "string") {
+      await state.client.request("PATCH", `/cards/${encodeURIComponent(card.id)}`, {
+        latestUpdate: parsed.values.plan,
+      });
       await postAgentComment(state, card.id, agentId, parsed.values.plan);
     }
   }
 
-  return { epic, feature, card };
+  const statuses = await loadStatuses(state);
+  return {
+    __render: "bootstrap",
+    data: {
+      epic,
+      epicCreated,
+      feature,
+      featureCreated,
+      card,
+      statusName: statuses.find((s) => s.id === card.statusId)?.name ?? statusName,
+    },
+  };
 }
