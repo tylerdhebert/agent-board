@@ -136,6 +136,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
     const conditions = [
       query.status ? eq(inputRequests.status, query.status as "pending" | "answered" | "timed_out") : undefined,
       query.cardId ? eq(inputRequests.cardId, query.cardId) : undefined,
+      query.agentId ? eq(inputRequests.agentId, query.agentId) : undefined,
     ].filter(Boolean) as Parameters<typeof and>;
 
     return db
@@ -148,6 +149,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
     query: t.Object({
       status: t.Optional(t.String()),
       cardId: t.Optional(t.String()),
+      agentId: t.Optional(t.String()),
     }),
   })
   .get("/pending", () => {
@@ -180,7 +182,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
   .post(
     "/",
     async ({ body, set }) => {
-      const { cardId, questions, timeoutSecs = 900, detach = false } = body;
+      const { cardId, agentId = null, questions, timeoutSecs = 900, detach = false } = body;
 
       const card = db.select().from(cards).where(eq(cards.id, cardId)).get();
       if (!card) {
@@ -201,6 +203,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
         .values({
           id: requestId,
           cardId,
+          agentId,
           previousStatusId,
           questions: JSON.stringify(questions),
           answers: null,
@@ -230,6 +233,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
       const request = {
         id: requestId,
         cardId,
+        agentId,
         previousStatusId,
         questions,
         answers: null,
@@ -272,6 +276,7 @@ export const inputRoutes = new Elysia({ prefix: "/input" })
     {
       body: t.Object({
         cardId: t.String(),
+        agentId: t.Optional(t.String()),
         questions: t.Array(
           t.Object({
             id: t.String(),

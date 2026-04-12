@@ -72,6 +72,21 @@ function renderCardList(data: unknown): string {
   return renderTable(rows);
 }
 
+function renderCardDetail(data: unknown): string {
+  const ctx = data as CardContextData;
+  const lines = [
+    `Ref: ${ctx.card.ref}`,
+    `Title: ${ctx.card.title}`,
+    `Status: ${ctx.statusName}`,
+    `Agent: ${ctx.card.agentId ?? "Unassigned"}`,
+    `Feature: ${ctx.featureRef ? `${ctx.featureRef} / ${ctx.featureTitle ?? "-"}` : (ctx.featureTitle ?? "-")}`,
+    `Epic: ${ctx.epicTitle ?? "-"}`,
+    `Created: ${formatRelative(ctx.card.createdAt)}`,
+    `Updated: ${formatRelative(ctx.card.updatedAt)}`,
+  ];
+  return lines.join("\n");
+}
+
 function renderCardContext(data: unknown): string {
   const ctx = data as CardContextData;
   const lines = [
@@ -84,6 +99,7 @@ function renderCardContext(data: unknown): string {
     `Blocked: ${ctx.blocked ? "yes" : "no"}`,
     `Waiting on input: ${ctx.waitingOnInput ? "yes" : "no"}`,
   ];
+  if (ctx.card.description) lines.push(`Description: ${ctx.card.description}`);
   if (ctx.card.blockedReason) lines.push(`Blocked reason: ${ctx.card.blockedReason}`);
   if (ctx.card.plan) lines.push(`Plan: ${ctx.card.plan}`);
   if (ctx.card.latestUpdate) lines.push(`Latest update: ${ctx.card.latestUpdate}`);
@@ -129,12 +145,21 @@ function renderCardDiff(data: unknown): string {
 function renderTaskflow(data: unknown): string {
   const payload = data as Record<string, unknown>;
   const card = payload.card as Record<string, unknown> | undefined;
+  const inboxMessages = Array.isArray(payload.inboxMessages)
+    ? payload.inboxMessages as QueueMessage[]
+    : [];
   const lines = [
     `${String(payload.action ?? "Updated")} ${String(card?.ref ?? card?.id ?? "card")}`,
   ];
   if (card?.title) lines.push(`Title: ${String(card.title)}`);
   if (payload.statusName) lines.push(`Status: ${String(payload.statusName)}`);
   if (typeof payload.inboxCount === "number") lines.push(`Inbox: ${payload.inboxCount} pending`);
+  if (inboxMessages.length > 0) {
+    lines.push("Inbox messages:");
+    for (const message of inboxMessages) {
+      lines.push(`  [${formatRelative(message.createdAt)}] ${message.body}`);
+    }
+  }
   if (payload.note) lines.push(String(payload.note));
   return lines.join("\n");
 }
@@ -176,14 +201,18 @@ function renderDepList(data: unknown): string {
 
 function renderDepBoard(data: unknown): string {
   if (!Array.isArray(data) || data.length === 0) return "No dependencies.";
-  return data
-    .map((e) => {
+  const rows = [
+    ["BLOCKER", "STATUS", "TITLE", "→", "DEPENDENT"],
+    ...data.map((e) => {
       const entry = e as Record<string, unknown>;
       const from = String(entry.blockerRef ?? entry.blockerCardRef ?? entry.blockerId ?? "-");
       const to = String(entry.cardRef ?? entry.dependentRef ?? entry.cardId ?? "-");
-      return `${from} → ${to}`;
-    })
-    .join("\n");
+      const status = String(entry.blockerStatusName ?? entry.statusName ?? "-");
+      const title = String(entry.blockerTitle ?? entry.title ?? "-");
+      return [from, status, title, "→", to];
+    }),
+  ];
+  return renderTable(rows);
 }
 
 // ── Admin types ────────────────────────────────────────────────────────────────
@@ -192,10 +221,15 @@ function renderStatusList(data: unknown): string {
   if (!Array.isArray(data)) return renderRecord(data);
   if (data.length === 0) return "No statuses.";
   const rows = [
-    ["NAME", "COLOR", "POSITION"],
+    ["NAME", "COLOR", "POSITION", "CORE"],
     ...data.map((s) => {
       const st = s as Record<string, unknown>;
-      return [String(st.name ?? "-"), String(st.color ?? "-"), String(st.position ?? "-")];
+      return [
+        String(st.name ?? "-"),
+        String(st.color ?? "-"),
+        String(st.position ?? "-"),
+        st.isCore ? "yes" : "no",
+      ];
     }),
   ];
   return renderTable(rows);
@@ -266,7 +300,7 @@ function renderWorkflowStatuses(data: unknown): string {
     ...data.map((ws) => {
       const w = ws as Record<string, unknown>;
       return [
-        String(w.statusName ?? w.statusId ?? "-"),
+        String(w.name ?? w.statusName ?? w.statusId ?? "-"),
         String(w.position ?? "-"),
         w.triggersMerge ? "yes" : "no",
       ];
@@ -337,31 +371,13 @@ function renderQueueList(data: unknown): string {
     .join("\n");
 }
 
-function renderQueueConversations(data: unknown): string {
-  if (!Array.isArray(data)) return renderRecord(data);
-  if (data.length === 0) return "No conversations.";
-  const rows = [
-    ["AGENT", "UNREAD", "LAST"],
-    ...data.map((conv) => {
-      const c = conv as Record<string, unknown>;
-      const last = String(c.lastMessage ?? c.lastBody ?? "-").slice(0, 60);
-      return [
-        String(c.agentId ?? "-"),
-        String(c.unreadCount ?? c.unread ?? 0),
-        last,
-      ];
-    }),
-  ];
-  return renderTable(rows);
-}
-
 // ── Input types ────────────────────────────────────────────────────────────────
 
 function renderInputList(data: unknown): string {
   if (!Array.isArray(data)) return renderRecord(data);
   if (data.length === 0) return "No input requests.";
   const rows = [
-    ["ID", "CARD", "STATUS", "PROMPT"],
+    ["ID", "CARD", "AGENT", "STATUS", "PROMPT"],
     ...data.map((req) => {
       const r = req as Record<string, unknown>;
       const questions = Array.isArray(r.questions) ? r.questions : [];
@@ -372,6 +388,7 @@ function renderInputList(data: unknown): string {
       return [
         String(r.id ?? "-").slice(0, 8),
         String(r.cardId ?? "-"),
+        String(r.agentId ?? "-"),
         String(r.status ?? "-"),
         firstPrompt.slice(0, 60),
       ];
@@ -387,7 +404,9 @@ function renderInputRecord(data: unknown): string {
   lines.push(`status: ${String(r.status ?? "-")}`);
   const request = r.request as Record<string, unknown> | undefined;
   const cardId = request?.cardId ?? r.cardId;
+  const agentId = request?.agentId ?? r.agentId;
   if (cardId) lines.push(`card: ${String(cardId)}`);
+  if (agentId) lines.push(`agent: ${String(agentId)}`);
   if (r.answers && typeof r.answers === "object") {
     for (const [k, v] of Object.entries(r.answers as Record<string, string>)) {
       lines.push(`answer.${k}: ${String(v)}`);
@@ -401,7 +420,7 @@ function renderInputRecord(data: unknown): string {
 export const renderers = new Map<string, (data: unknown) => string>([
   ["card-list",           renderCardList],
   ["card-context",        renderCardContext],
-  ["card-detail",         renderCardContext],
+  ["card-detail",         renderCardDetail],
   ["card-diff",           renderCardDiff],
   ["feature-list",        renderFeatureList],
   ["taskflow",            renderTaskflow],
@@ -419,7 +438,6 @@ export const renderers = new Map<string, (data: unknown) => string>([
   ["commit-detail",       renderCommitDetail],
   ["bootstrap",           renderBootstrap],
   ["queue-list",          renderQueueList],
-  ["queue-conversations", renderQueueConversations],
   ["input-list",          renderInputList],
   ["input-record",        renderInputRecord],
 ]);

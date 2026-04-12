@@ -6,6 +6,7 @@ export interface Status {
   name: string;
   color: string;
   position: number;
+  isCore: boolean;
   createdAt: string;
 }
 

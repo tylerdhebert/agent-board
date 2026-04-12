@@ -118,12 +118,18 @@ export function StatusesSection() {
             const count = cardCount(s.id);
             const isEditing = editingId === s.id;
             const isConfirming = deletingId === s.id;
+            const canRename = !s.isCore;
+            const canDelete = !s.isCore;
 
             return (
               <div key={s.id} className="surface-panel px-4 py-3" style={{ boxShadow: `inset 3px 0 0 ${s.color}` }}>
                 {isEditing ? (
                   <div className="flex items-center gap-2">
-                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className={inputCls(false, "flex-1")} />
+                    {canRename ? (
+                      <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className={inputCls(false, "flex-1")} />
+                    ) : (
+                      <div className={`${inputCls(true, "flex-1")} truncate`}>{s.name}</div>
+                    )}
                     <input
                       type="color"
                       value={editColor}
@@ -139,7 +145,14 @@ export function StatusesSection() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
-                    <span className="flex-1 text-[12px] font-mono text-[var(--text-primary)]">{s.name}</span>
+                    <div className="flex flex-1 items-center gap-2">
+                      <span className="text-[12px] font-mono text-[var(--text-primary)]">{s.name}</span>
+                      {s.isCore ? (
+                        <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.14em] text-[var(--text-dim)]">
+                          Core
+                        </span>
+                      ) : null}
+                    </div>
                     <span className="text-[10px] font-mono text-[var(--text-dim)]">{count} card{count !== 1 ? "s" : ""}</span>
                     <div className="flex items-center gap-3">
                       {!isConfirming && (
@@ -179,16 +192,18 @@ export function StatusesSection() {
                           </button>
                         </>
                       )}
-                      <DeleteConfirmRow
-                        confirming={isConfirming}
-                        onStartConfirm={() => {
-                          setDeletingId(s.id);
-                          setEditingId(null);
-                        }}
-                        onCancel={() => setDeletingId(null)}
-                        onConfirm={() => deleteStatus(s.id)}
-                        warningText={count > 0 ? `${count} card${count !== 1 ? "s" : ""} affected` : undefined}
-                      />
+                      {canDelete ? (
+                        <DeleteConfirmRow
+                          confirming={isConfirming}
+                          onStartConfirm={() => {
+                            setDeletingId(s.id);
+                            setEditingId(null);
+                          }}
+                          onCancel={() => setDeletingId(null)}
+                          onConfirm={() => deleteStatus(s.id)}
+                          warningText={count > 0 ? `${count} card${count !== 1 ? "s" : ""} affected` : undefined}
+                        />
+                      ) : null}
                     </div>
                   </div>
                 )}

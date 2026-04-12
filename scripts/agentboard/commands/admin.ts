@@ -421,16 +421,18 @@ export async function handleWorktree(state: CommandState, args: string[]) {
       );
       const repoId = await resolveRepoId(state, requireString(parsed.values, "repo"));
       const card = await getCard(state, cardId);
-      const feature =
-        card.featureId
-          ? (await loadFeatures(state)).find((item) => item.id === card.featureId)
-          : undefined;
       const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false) ?? card.agentId ?? null;
       const branchName =
         (parsed.values.branch as string | undefined)
         ?? card.branchName
         ?? buildGeneratedBranchName(agentId, card);
-      const created = await state.client.request<{ path: string; branchName: string; cardId: string }>("POST", "/worktrees", {
+      const created = await state.client.request<{
+        path: string;
+        branchName: string;
+        cardId: string;
+        baseBranch: string | null;
+        reusedExistingBranch: boolean;
+      }>("POST", "/worktrees", {
         cardId,
         repoId,
         branchName,
@@ -441,10 +443,10 @@ export async function handleWorktree(state: CommandState, args: string[]) {
         data: {
           ...created,
           cardRef: card.ref,
-          baseBranch: parsed.values.base as string | undefined,
+          baseBranch: created.baseBranch,
           note:
-            !(parsed.values.base as string | undefined)
-              ? "Base branch defaults to the repo's currently checked-out branch."
+            created.reusedExistingBranch
+              ? "Existing card branch reused; this command did not determine its original base branch."
               : undefined,
         },
       };

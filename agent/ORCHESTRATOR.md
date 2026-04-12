@@ -1,73 +1,84 @@
 # Orchestrator Guide
 
-Use this guide for orchestrator agents, board agents, or human operators coordinating multiple implementers.
+Use this role when you are the primary dispatcher for a request.
 
-## Primary responsibilities
+## Mission
 
-- Consume planner output and execute delegation against it.
-- Coordinate assignment timing and handoffs across implementers.
-- Confirm dependency/order intent from planner output is respected in execution.
-- Hand card CRUD, dependency wiring, queue nudges, and worktree hygiene to the board agent when available.
-- Avoid doing implementation work unless you are explicitly switching roles.
+Your job is only to decide what to spawn next and launch it through the orchestration runtime.
 
-## Ownership boundary with board agent
+Default chain:
 
-- Planner owns decomposition, prioritization, and task-shape decisions.
-- Orchestrator owns delegation and execution coordination based on planner output.
-- Board agent is the execution owner for board operations: card updates/creation, dependency maintenance, queue coordination, and worktree policy enforcement.
-- When a board agent is active, orchestrator should avoid directly mutating card state except for urgent correction.
-- When no board agent is active, orchestrator temporarily performs board-agent duties.
+`planner -> orchestrator -> board-agent -> implementer/reviewer`
 
-## Starting a new epic
+## Important scope boundary
 
-Create the feature first if needed:
+- `agentboard` is a coordination interface, not a process spawner.
+- Worker/board-agent process launches happen out-of-band in your orchestration runtime.
+- Queue messaging is user-facing and not a reliable agent-to-agent coordination channel.
+
+## What to optimize for
+
+- Fast dispatch throughput.
+- Correct spawn order from planner intent.
+- Minimal context reads before spawning.
+
+## Do not do these by default
+
+- Do not read repo code.
+- Do not read deep docs.
+- Do not inspect card internals (`cards context`) unless an execution blocker requires it.
+- Do not perform normal board-agent work when a board-agent is active.
+- Do not do implementation work unless explicitly reassigned.
+
+## Ownership boundaries
+
+- Planner owns decomposition and ordering intent.
+- Orchestrator owns launch timing and spawn decisions.
+- Board-agent owns card creation/assignment/dependency wiring and execution-ID assignment.
+- Implementer/reviewer own execution-state transitions on assigned cards.
+
+When board-agent is unavailable, orchestrator temporarily performs board-agent duties, then returns to dispatch-only mode.
+
+## Identity convention for orchestrator
+
+- Use request-scoped control IDs:
+  - `{role}-{request-slug}-{n}`
+  - example: `orchestrator-q2-rollout-1`
+- Helper:
+  - `agentboard id suggest --role orchestrator --control --request q2-rollout`
+
+## Assignment handshake
+
+Orchestrator should launch workers from board-agent assignment output, not invent worker IDs.
+
+Expected assignment ticket fields:
+
+- `card_ref`
+- `agent_id`
+- `role`
+- `spawn_next`
+- `depends_on` (`none` when unblocked)
+
+If tickets are missing required fields, request corrected tickets from board-agent via your runtime coordination path (not queue).
+
+## Dispatch loop (hot path)
+
+1. Read planner output.
+2. Receive assignment tickets from board-agent.
+3. Spawn the next worker strictly from the highest-ready ticket.
+4. Repeat.
+
+Minimal `agentboard` commands in this role:
 
 ```bash
-agentboard feature create --epic "Agent Operations" --title "CLI workflow polish" --repo agent-board --branch feat/agent-cli
+agentboard inbox --agent orchestrator-q2-rollout-1
+agentboard cards list --status "Blocked"
 ```
 
-Create the initial task cards from planner output:
+## Escalation rules
 
-```bash
-agentboard cards create --feature feat-12 --title "Refactor card context output"
-agentboard cards create --feature feat-12 --title "Refactor worktree branch defaults"
-agentboard cards create --feature feat-12 --title "Update agent docs and examples"
-```
+- If board-agent output is missing `agent_id` or `card_ref`, request a corrected ticket instead of guessing.
+- If dependencies are unclear, ask board-agent for a ready-order update through runtime coordination.
+- If no ready ticket exists, ask planner for re-sequencing guidance.
 
-Wire up dependencies immediately:
-
-```bash
-agentboard dep add --card card-143 --blocker card-142
-agentboard dep add --card card-144 --blocker card-143
-```
-
-Assign work and send kickoff messages:
-
-```bash
-agentboard cards claim card-142 --agent implementer-1
-agentboard queue send --agent implementer-1 --body "Start with card-142. Use cards context before editing." --author orchestrator
-agentboard queue send --agent implementer-2 --body "Hold for card-143 after card-142 moves to review." --author orchestrator
-```
-
-## Parallel agent rules
-
-- Do not assign two agents to the same card.
-- Do not expect two agents to share the same worktree branch.
-- If multiple agents are working under one feature, each agent should have a separate card and a separate card worktree branch.
-- Use dependencies to express order. Do not rely on queue messages alone.
-- Keep the repo checked out to the intended integration branch before board agent worktree creation.
-
-## Role split with board agent
-
-- Planner owns planning, decomposition, assignment intent, prioritization, and sequence decisions.
-- Orchestrator owns delegation timing, assignment execution, and cross-agent coordination.
-- Board agent owns card creation/updates, dependency wiring, queue nudges, stale cleanup, and worktree hygiene checks.
-
-Canonical handoff to board agent:
-
-```bash
-agentboard queue send --agent board-agent --body "Create cards for feat-12 from planner output and wire dependencies. Assign implementer-1 to card-142 and implementer-2 to card-143." --author orchestrator
-agentboard queue send --agent board-agent --body "Confirm both cards have separate worktree branches after implementers start." --author orchestrator
-```
-
-This split keeps orchestrator prompts lean and keeps board state reliable.
+The orchestrator stays in dispatch mode. Think in terms of "what should spawn next."

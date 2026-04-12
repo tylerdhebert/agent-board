@@ -24,6 +24,7 @@ export interface Status {
   name: string;
   color: string;
   position: number;
+  isCore?: boolean;
   createdAt?: string;
 }
 
@@ -119,6 +120,7 @@ export interface InputQuestion {
 export interface InputRequestRecord {
   id: string;
   cardId: string;
+  agentId?: string | null;
   previousStatusId?: string | null;
   questions: InputQuestion[];
   answers?: Record<string, string> | null;

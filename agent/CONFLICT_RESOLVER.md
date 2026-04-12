@@ -14,11 +14,13 @@ Do **not** change the card's status. Do not merge the branch. Those decisions be
 
 ## Canonical operating loop
 
-Claim and inspect:
+Choose a card-backed worker ID, then claim and inspect:
 
 ```bash
-agentboard cards claim card-142 --agent conflict-resolver
-agentboard cards context --card card-142 --agent conflict-resolver
+agentboard id suggest --role conflict-resolver --card card-142
+# example result: conflict-resolver-card-142
+agentboard cards claim --card card-142 --agent conflict-resolver-card-142
+agentboard cards context --card card-142 --agent conflict-resolver-card-142
 ```
 
 The context output format is `key: value` lines. Look for:
@@ -31,7 +33,7 @@ The context output format is `key: value` lines. Look for:
 Ensure a worktree exists for the card branch:
 
 ```bash
-agentboard worktree create --card card-142 --repo <repo-name> --agent conflict-resolver
+agentboard worktree create --card card-142 --repo <repo-name> --agent conflict-resolver-card-142
 ```
 
 The worktree path is `<repo-path>/../.git-worktrees/<branchName>`. Work from inside it.
@@ -75,40 +77,43 @@ git rebase <target-branch>
 
 ```bash
 agentboard feature build <feat-ref>
-agentboard feature build-status <feat-ref>
 ```
 
-`feature build-status` prints `key: value` output with a `status:` field (`running`, `passed`, or `failed`). Poll until `status: passed` before proceeding.
+Then poll until the build finishes. `feature build-status` is a single one-shot GET — call it repeatedly until `status:` is no longer `running`:
 
-Wait for the build to pass. If it fails, fix the build issue — conflicts that compile but break behaviour are still conflicts.
+```bash
+agentboard feature build-status <feat-ref>
+# status: running  → wait and call again
+# status: passed   → proceed
+# status: failed   → fix the build issue and rebuild
+```
+
+Wait for `status: passed` before proceeding. If it fails, fix the build issue — conflicts that compile but break behaviour are still conflicts.
 
 ## After resolution
 
 Clear the conflict state:
 
 ```bash
-agentboard cards update card-142 --clear-conflict
+agentboard cards update --card card-142 --clear-conflict
 ```
 
 Post a summary comment:
 
 ```bash
-agentboard cards comment --card card-142 --agent conflict-resolver \
-  --body "Resolved conflicts in <list of files>. Approach: <brief description of how each conflict was handled>. Build: passed."
+agentboard cards comment --card card-142 --agent conflict-resolver-card-142 --body "Resolved conflicts in <list of files>. Approach: <brief description of how each conflict was handled>. Build: passed."
 ```
 
 Set the handoff summary so the board-agent knows to act:
 
 ```bash
-agentboard cards update card-142 \
-  --handoff-summary "Conflicts resolved. Rebased onto <target>. Build verified. Ready for status advance."
+agentboard cards update --card card-142 --handoff-summary "Conflicts resolved. Rebased onto <target>. Build verified. Ready for status advance."
 ```
 
-Finish your turn:
+Finish your turn without advancing status beyond the resolver handoff:
 
 ```bash
-agentboard finish --agent conflict-resolver --card card-142 \
-  --summary "Resolved conflicts, cleared conflict state, build passing. Handoff summary set."
+agentboard finish --agent conflict-resolver-card-142 --card card-142 --status "Done" --summary "Resolved conflicts, cleared conflict state, build passing. Handoff summary set."
 ```
 
 ## Quality checks for this role

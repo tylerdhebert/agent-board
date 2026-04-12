@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:31377/api`
 
-Preferred interface: `AGENT_CLI.md`
+Preferred interface: `agentboard help`
 
 Use the CLI by default. This file is the canonical raw HTTP contract and edge-case reference.
 
@@ -10,8 +10,10 @@ CLI aliases such as `session`, `inbox`, singular/plural resource names, and work
 
 ## Identity and status enforcement
 
-- `agentId` is an arbitrary caller-chosen string such as `implementer-1`.
-- Queue conversations are keyed by exact `agentId`.
+- `agentId` is an arbitrary caller-chosen string such as `implementer-card-142`.
+- Queue threads are keyed by exact `agentId`.
+- Seeded statuses are core and permanent. They may be recolored/reordered, but they are not renameable or deletable.
+- Additional statuses may be added for local UI/workflow needs.
 - Use the common path `To Do -> In Progress -> In Review -> Needs Revision -> Done` unless the situation clearly calls for something else.
 
 ## Health
@@ -49,6 +51,8 @@ Notes:
 
 - `GET /statuses` is ordered by `position`.
 - `POST /statuses` auto-assigns the next `position` if one is not supplied.
+- Seeded statuses return `isCore: true`.
+- Core statuses may be recolored/reordered, but the server rejects renaming or deleting them.
 
 ## Repos
 
@@ -207,10 +211,15 @@ Critical behavior:
 
 - Card creation requires a valid `featureId`.
 - The server copies `epicId` from the feature during card creation.
+- Once `featureId` is set on a card, the server rejects changing it to a different feature.
+- Once `epicId` is set on a card, the server rejects changing it to a different epic.
+- If a legacy/repair flow fills a null `featureId`, the server derives `epicId` from that feature automatically.
+- If `featureId` is present, `epicId` must match that feature's epic.
 - Claiming sets `agentId`.
-- Claiming auto-advances `To Do -> In Progress` unless `autoAdvance` is `false`.
+- Claiming auto-advances `To Do -> In Progress` unless `autoAdvance` is `false`. (CLI: `--no-auto-advance` maps to `"autoAdvance": false`.)
 - Moving a card to `Done` stamps `completedAt`.
 - Moving a card away from `Done` clears `completedAt`.
+- `agentId` must be included in any PATCH that changes `statusId`. The server does not enforce this, but omitting it violates the agent protocol in `AGENT_MANDATE.md`.
 
 ### Comments
 
@@ -302,7 +311,7 @@ Notes:
 
 ```http
 GET  /input
-GET  /input?status=<pending|answered|timed_out>&cardId=<cardId>
+GET  /input?status=<pending|answered|timed_out>&cardId=<cardId>&agentId=<agentId>
 GET  /input/pending
 GET  /input/:id
 POST /input
@@ -315,6 +324,7 @@ Bodies:
 POST /input
 {
   "cardId": "card-id",
+  "agentId": "implementer-card-142",
   "questions": [
     { "id": "q1", "type": "yesno", "prompt": "Overwrite config?" },
     { "id": "q2", "type": "choice", "prompt": "Which env?", "options": ["staging", "prod"] },
@@ -326,6 +336,7 @@ POST /input
 POST /input
 {
   "cardId": "card-id",
+  "agentId": "implementer-card-142",
   "questions": [
     { "id": "q1", "type": "yesno", "prompt": "Overwrite config?" }
   ],
@@ -356,7 +367,8 @@ Notes:
 - `POST /input` long-polls until the request is answered or times out.
 - `POST /input` with `"detach": true` creates the request and returns immediately with the saved request record.
 - `GET /input/:id` is the recovery/read path for a specific request.
-- `GET /input` lists requests and supports filtering by `status` and `cardId`.
+- `GET /input` lists requests and supports filtering by `status`, `cardId`, and `agentId`.
+- `agentId` is optional on input requests and records which agent opened the blocking request.
 - If a status named exactly `Blocked` exists, the server moves the card there while the request is pending.
 - The server records `previousStatusId`.
 - On answer or timeout, the previous status is restored only if the card is in `Blocked`.
@@ -373,8 +385,7 @@ Notes:
 ## Queue and communication
 
 ```http
-GET    /queue/conversations
-GET    /queue?agentId=<agentId>&status=<pending|read>
+GET    /queue?agentId=<agentId>&status=<pending|read>&author=<author>
 POST   /queue
 POST   /queue/:id/read
 DELETE /queue/conversations/:agentId
@@ -399,7 +410,9 @@ Notes:
 - For agent replies inside their own thread, use:
   - `agentId = <agent-id>`
   - `author = <agent-id>`
-- Conversation unread counts count `pending` messages whose `author != "user"`.
+- Agent inbox polling should use `GET /queue?agentId=<id>&status=pending&author=user`.
+- An empty result means the user has not sent that exact agent any unread messages.
+- Queue is for user-facing communication, not agent-to-agent coordination.
 
 ## Worktrees
 
@@ -430,6 +443,10 @@ Creation behavior:
   3. `repo.baseBranch`
 - if the requested card branch already exists, the server adds the worktree without `-b`
 - the card's `branchName` and `repoId` are updated on success
+- the response includes:
+  - `branchName`: the worktree/card branch
+  - `baseBranch`: the actual base branch used when this request created the branch
+  - `reusedExistingBranch`: `true` when the branch already existed and the original base was not determined here
 
 Deletion behavior:
 
@@ -483,4 +500,4 @@ These are implemented by the repo CLI, not the server itself:
 - `input list` / `input get`
 - `raw --query key=value`
 
-For those behaviors, see `AGENT_CLI.md`.
+For those behaviors, run `agentboard help` or `agentboard <command> help`.

@@ -189,25 +189,80 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
   // Update card
   .patch(
     "/:id",
-    ({ params, body }) => {
+    ({ params, body, set }) => {
+      const existing = db.select().from(cards).where(eq(cards.id, params.id)).get();
+      if (!existing) {
+        set.status = 404;
+        return { error: "Not found" };
+      }
+
+      const patch: Record<string, unknown> = { ...body };
+      const requestedFeatureId = "featureId" in body ? body.featureId : undefined;
+      if (requestedFeatureId !== undefined) {
+        if (requestedFeatureId === existing.featureId) {
+          delete patch.featureId;
+        } else if (existing.featureId !== null) {
+          set.status = 409;
+          return { error: "Card feature is already set and cannot be changed" };
+        } else if (requestedFeatureId === null) {
+          patch.featureId = null;
+        } else {
+          const nextFeature = db.select().from(features).where(eq(features.id, requestedFeatureId)).get();
+          if (!nextFeature) {
+            set.status = 400;
+            return { error: "Feature not found" };
+          }
+          patch.featureId = requestedFeatureId;
+          patch.epicId = nextFeature.epicId;
+        }
+      }
+
+      const requestedEpicId = "epicId" in body ? body.epicId : undefined;
+      if (requestedEpicId !== undefined) {
+        if (requestedEpicId === existing.epicId) {
+          if (!("featureId" in patch)) {
+            delete patch.epicId;
+          }
+        } else if (existing.epicId !== null) {
+          set.status = 409;
+          return { error: "Card epic is already set and cannot be changed" };
+        } else {
+          const featureIdForEpic =
+            typeof patch.featureId === "string"
+              ? patch.featureId
+              : existing.featureId;
+          if (featureIdForEpic) {
+            const feature = db.select().from(features).where(eq(features.id, featureIdForEpic)).get();
+            const derivedEpicId = feature?.epicId ?? null;
+            if (requestedEpicId !== null && requestedEpicId !== derivedEpicId) {
+              set.status = 400;
+              return { error: "Card epic must match the card feature's epic" };
+            }
+            patch.epicId = derivedEpicId;
+          } else {
+            patch.epicId = requestedEpicId;
+          }
+        }
+      }
+
       const now = nowIso();
 
       // Determine completedAt: stamp when moving to Done, clear when moving away
       let completedAt: string | null | undefined = undefined;
-      if (body.statusId) {
-        const status = db.select().from(statuses).where(eq(statuses.id, body.statusId)).get();
+      if (typeof patch.statusId === "string") {
+        const status = db.select().from(statuses).where(eq(statuses.id, patch.statusId)).get();
         if (status) {
           completedAt = status.name.toLowerCase() === "done" ? now : null;
         }
       }
 
-      const patch: Record<string, unknown> = { ...body, updatedAt: now };
+      patch.updatedAt = now;
       if (completedAt !== undefined) patch.completedAt = completedAt;
 
       const updated = updateCardAndBroadcast(params.id, patch);
 
       // Check for merge conflicts when moving to a triggersMerge status
-      if (body.statusId && updated.branchName && updated.repoId) {
+      if (typeof patch.statusId === "string" && updated.branchName && updated.repoId) {
         const epic = updated.epicId
           ? db.select().from(epics).where(eq(epics.id, updated.epicId)).get()
           : null;
@@ -215,7 +270,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
           const ws = db.select().from(workflowStatuses)
             .where(and(
               eq(workflowStatuses.workflowId, epic.workflowId),
-              eq(workflowStatuses.statusId, body.statusId)
+              eq(workflowStatuses.statusId, patch.statusId)
             ))
             .get();
           if (ws?.triggersMerge) {
@@ -254,8 +309,8 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       }
 
       // If card was moved to Done, check if any blocked-by-this-card cards are now fully unblocked
-      if (body.statusId) {
-        const newStatus = db.select().from(statuses).where(eq(statuses.id, body.statusId)).get();
+      if (typeof patch.statusId === "string") {
+        const newStatus = db.select().from(statuses).where(eq(statuses.id, patch.statusId)).get();
         if (newStatus?.name.toLowerCase() === "done") {
           const doneStatusId = newStatus.id;
           // Find all cards that were blocked by this card
@@ -555,7 +610,27 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
   .get(
     "/dependencies",
     () => {
-      return db.select().from(cardDependencies).all();
+      const allDeps = db.select().from(cardDependencies).all();
+      const allCards = db.select().from(cards).all();
+      const allStatuses = db.select().from(statuses).all();
+      const cardMap = Object.fromEntries(allCards.map((c) => [c.id, c]));
+      const statusMap = Object.fromEntries(allStatuses.map((s) => [s.id, s]));
+      return allDeps.map((dep) => {
+        const blocker = cardMap[dep.blockerCardId];
+        const dependent = cardMap[dep.blockedCardId];
+        const blockerStatus = blocker ? statusMap[blocker.statusId] : undefined;
+        return {
+          id: dep.id,
+          blockerCardId: dep.blockerCardId,
+          blockedCardId: dep.blockedCardId,
+          blockerRef: blocker ? `card-${blocker.refNum}` : null,
+          blockerTitle: blocker?.title ?? "(deleted)",
+          blockerStatusName: blockerStatus?.name ?? "",
+          cardRef: dependent ? `card-${dependent.refNum}` : null,
+          cardTitle: dependent?.title ?? "(deleted)",
+          createdAt: dep.createdAt,
+        };
+      });
     }
   )
   // Get card dependencies — returns blockers and cards this card is blocking

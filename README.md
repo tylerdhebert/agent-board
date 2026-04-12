@@ -34,7 +34,7 @@ The database is created automatically at `data/agent-board.db` on first run. Def
 - **Build status** — per-feature build trigger with live status badge and expandable output in the commit panel
 - **Card dependencies** — link cards as blockers; blocked cards show a lock icon on the board
 - **Merge conflict detection** — auto-runs `git merge-tree` when a card reaches a merge-trigger status; shows conflict details per file in a diff-style viewer
-- **Admin panel** — manage statuses, workflows, repos, epics, features, cards, and keyboard shortcuts
+- **Admin panel** — add statuses, recolor/reorder permanent core statuses, and manage workflows, repos, epics, features, cards, and keyboard shortcuts
 
 ### For agents
 - Create and update cards to represent their work
@@ -52,18 +52,17 @@ The database is created automatically at `data/agent-board.db` on first run. Def
 
 ### Include CLI-first agent docs in agent instructions
 
-For normal operation, provide these docs first:
+For normal operation, agents need two things:
 
-- `agent/AGENT_CLI.md`
-- `agent/AGENT_MANDATE.md`
+1. Run `agentboard help` — prints the full command reference, hot path, conventions, and all behavioral notes inline.
+2. Read `agent/AGENT_MANDATE.md` — covers behavioral obligations, role ownership, communication rules, and non-negotiable failures.
 
 Use `agent/AGENT_API.md` only as the raw HTTP fallback when the CLI does not expose what is needed.
 
 ### Reuse the agent docs with symlink scripts
 
-The reusable agent instruction docs now live in `agent/`:
+The reusable agent instruction docs live in `agent/`:
 
-- `agent/AGENT_CLI.md`
 - `agent/AGENT_MANDATE.md`
 - `agent/AGENT_API.md`
 - `agent/ORCHESTRATOR.md`
@@ -116,7 +115,7 @@ The chat widget (bottom-left) lets you exchange messages with any agent between 
 - **Exact match** — `GET /queue?agentId=implementer-1` delivers only messages addressed to exactly `implementer-1`. Agent IDs must match precisely.
 - **Unread badges** — the bar glows and shows a badge count when you have unread agent replies. Clicking into an open thread window clears its badge.
 - **Thread windows** — clicking a conversation opens a floating thread window. Up to 3 visible simultaneously; overflow threads appear in a `+N more` bar.
-- **Agents should poll** `GET /api/queue?agentId=<id>&status=pending` at the start of each turn.
+- **Agents should poll** `GET /api/queue?agentId=<id>&status=pending&author=user` at the start and end of each turn so they only see unread user-authored messages.
 
 ---
 
@@ -212,12 +211,11 @@ agent-board/
 ├── data/                    # SQLite database (gitignored)
 ├── agent/
 │   ├── AGENT_API.md         # HTTP reference for agents
-│   ├── AGENT_CLI.md         # CLI guide for agents
 │   ├── AGENT_MANDATE.md     # Mandatory protocol for agents
 │   └── scripts/
 │       ├── link-agent-docs.ps1
 │       └── link-agent-docs.sh
-└── CLAUDE.md                # Guidance for Claude Code
+└── docs/CLAUDE.md           # Guidance for Claude Code
 ```
 
 ---
@@ -251,4 +249,3 @@ agent-board/
 **Migrations** — no migration runner. `initDb()` runs `CREATE TABLE IF NOT EXISTS` on every startup. New columns are added with `ALTER TABLE ... ADD COLUMN` in a try/catch (no-op if already present).
 
 **Server split** — `app.ts` builds and exports the Elysia app (and the `App` type). `index.ts` calls `.listen()`. This split lets the client import `App` via the `@server` path alias without pulling in Bun's native runtime modules.
-

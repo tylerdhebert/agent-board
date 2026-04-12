@@ -15,7 +15,7 @@ export const statusRoutes = new Elysia({ prefix: "/statuses" })
       const id = randomUUID();
       const all = db.select().from(statuses).all();
       const position = all.length;
-      const row = { id, ...body, position };
+      const row = { id, ...body, position, isCore: false };
       db.insert(statuses).values(row).run();
       const created = db
         .select()
@@ -34,7 +34,16 @@ export const statusRoutes = new Elysia({ prefix: "/statuses" })
   )
   .patch(
     "/:id",
-    ({ params, body }) => {
+    ({ params, body, set }) => {
+      const existing = db.select().from(statuses).where(eq(statuses.id, params.id)).get();
+      if (!existing) {
+        set.status = 404;
+        return { error: "Not found" };
+      }
+      if (existing.isCore && typeof body.name === "string" && body.name !== existing.name) {
+        set.status = 400;
+        return { error: "Core statuses cannot be renamed" };
+      }
       db.update(statuses)
         .set(body)
         .where(eq(statuses.id, params.id))
@@ -61,7 +70,16 @@ export const statusRoutes = new Elysia({ prefix: "/statuses" })
   )
   .delete(
     "/:id",
-    ({ params }) => {
+    ({ params, set }) => {
+      const existing = db.select().from(statuses).where(eq(statuses.id, params.id)).get();
+      if (!existing) {
+        set.status = 404;
+        return { error: "Not found" };
+      }
+      if (existing.isCore) {
+        set.status = 400;
+        return { error: "Core statuses cannot be deleted" };
+      }
       db.delete(statuses).where(eq(statuses.id, params.id)).run();
       wsManager.broadcast("status:deleted", { id: params.id });
       return { success: true };

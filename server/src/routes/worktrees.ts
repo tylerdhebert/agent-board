@@ -45,7 +45,13 @@ export const worktreeRoutes = new Elysia({ prefix: "/worktrees" })
         wsManager.broadcast("card:updated", updated);
       }
 
-      return { path: wtPath, branchName: body.branchName, cardId: body.cardId };
+      return {
+        path: wtPath,
+        branchName: body.branchName,
+        cardId: body.cardId,
+        baseBranch: branchExists.exitCode === 0 ? null : base,
+        reusedExistingBranch: branchExists.exitCode === 0,
+      };
     },
     {
       body: t.Object({

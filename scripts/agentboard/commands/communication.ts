@@ -170,16 +170,22 @@ export async function handleInput(state: CommandState, args: string[]) {
       const parsed = parseFlags(rest, {
         status: { type: "string" },
         card: { type: "string" },
+        agent: { type: "string" },
       });
       const cardId =
         typeof parsed.values.card === "string"
           ? await resolveCardId(state, parsed.values.card)
+          : undefined;
+      const agentId =
+        typeof parsed.values.agent === "string"
+          ? resolveAgentId(state, parsed.values.agent, false)
           : undefined;
       const data = await state.client.request<InputRequestRecord[]>(
         "GET",
         `/input${toQueryString({
           status: parsed.values.status as string | undefined,
           cardId,
+          agentId,
         })}`
       );
       return { __render: "input-list", data };
@@ -212,6 +218,7 @@ export async function handleInput(state: CommandState, args: string[]) {
     case "request": {
       const parsed = parseFlags(rest, {
         card: { type: "string" },
+        agent: { type: "string" },
         timeout: { type: "number", default: 900 },
         pollInterval: { type: "number", default: DEFAULT_POLL_INTERVAL_SECS },
         heartbeat: { type: "number", default: DEFAULT_HEARTBEAT_SECS },
@@ -227,9 +234,11 @@ export async function handleInput(state: CommandState, args: string[]) {
         state,
         (parsed.values.card as string | undefined) ?? parsed.positionals[0]
       );
+      const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
       const questions = parseQuestionsFromArgs(parsed.values);
       const request = await state.client.request<InputRequestRecord>("POST", "/input", {
         cardId,
+        agentId: agentId ?? undefined,
         questions,
         timeoutSecs: parsed.values.timeout as number,
         detach: true,
@@ -271,10 +280,6 @@ export async function handleQueue(state: CommandState, args: string[]) {
   }
 
   switch (action) {
-    case "conversations": {
-      const data = await state.client.request("GET", "/queue/conversations");
-      return { __render: "queue-conversations", data };
-    }
     case "list":
     case "inbox": {
       const parsed = parseFlags(rest, {
@@ -287,7 +292,7 @@ export async function handleQueue(state: CommandState, args: string[]) {
       const status = boolValue(parsed.values, "all") ? undefined : (parsed.values.status as string | undefined);
       const messages = await state.client.request<QueueMessage[]>(
         "GET",
-        `/queue${toQueryString({ agentId, status })}`
+        `/queue${toQueryString({ agentId, status, author: "user" })}`
       );
       if (boolValue(parsed.values, "markRead")) {
         for (const message of messages) {
@@ -346,7 +351,7 @@ export async function handleQueue(state: CommandState, args: string[]) {
       const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
       const messages = await state.client.request<QueueMessage[]>(
         "GET",
-        `/queue${toQueryString({ agentId, status: "pending" })}`
+        `/queue${toQueryString({ agentId, status: "pending", author: "user" })}`
       );
       for (const message of messages) {
         await state.client.request("POST", `/queue/${encodeURIComponent(message.id)}/read`);

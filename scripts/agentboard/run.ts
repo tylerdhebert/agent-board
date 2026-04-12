@@ -4,6 +4,7 @@ import { handleInput, handleQueue } from "./commands/communication";
 import { handleHealth, handleRaw } from "./commands/core";
 import { handleEpic, handleFeature, handleRepo, handleStatus, handleWorkflow, handleWorktree } from "./commands/admin";
 import { handleBootstrap, handleCheckpoint, handleFinish, handlePlan, handleStart } from "./commands/taskflow";
+import { handleId } from "./commands/identity";
 import { CliError } from "./core/errors";
 import type { CommandState } from "./core/types";
 
@@ -40,6 +41,8 @@ export async function runCommand(state: CommandState, args: string[]) {
       return handleInput(state, rest);
     case "queue":
       return handleQueue(state, rest);
+    case "id":
+      return handleId(state, rest);
     case "statuses":
     case "status":
       return handleStatus(state, rest);

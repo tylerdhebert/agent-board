@@ -28,6 +28,7 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
     const conditions = [
       query.agentId ? eq(queueMessages.agentId, query.agentId) : undefined,
       query.status ? eq(queueMessages.status, query.status as "pending" | "read") : undefined,
+      query.author ? eq(queueMessages.author, query.author) : undefined,
     ].filter(Boolean) as Parameters<typeof and>;
     return db.select().from(queueMessages)
       .where(and(...conditions))
@@ -37,6 +38,7 @@ export const queueRoutes = new Elysia({ prefix: "/queue" })
     query: t.Object({
       agentId: t.Optional(t.String()),
       status: t.Optional(t.String()),
+      author: t.Optional(t.String()),
     }),
   })
 

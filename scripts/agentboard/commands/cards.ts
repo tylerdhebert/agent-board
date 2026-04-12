@@ -142,13 +142,38 @@ export async function handleCard(state: CommandState, args: string[]) {
     case "get": {
       const parsed = parseFlags(rest, {
         card: { type: "string" },
-        agent: { type: "string" },
       });
-      const cardRef = (parsed.values.card as string | undefined) ?? parsed.positionals[0];
-      const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
+      const [card, statuses, features, epics] = await Promise.all([
+        state.client.request<Card>("GET", `/cards/${encodeURIComponent(cardId)}`),
+        loadStatuses(state),
+        loadFeatures(state),
+        loadEpics(state),
+      ]);
+      const statusName = statuses.find((s) => s.id === card.statusId)?.name ?? card.statusId;
+      const feature = features.find((item) => item.id === card.featureId);
+      const epic = epics.find((item) => item.id === card.epicId);
       return {
         __render: "card-detail",
-        data: await buildCardContext(state, requireString({ card: cardRef }, "card"), agentId),
+        data: {
+          card,
+          statusName,
+          featureTitle: feature?.title ?? null,
+          featureRef: feature?.ref ?? null,
+          epicTitle: epic?.title ?? null,
+          blocked: false,
+          waitingOnInput: false,
+          pendingInputPrompts: [],
+          blockers: [],
+          blocking: [],
+          repoName: null,
+          repoPath: null,
+          repoBaseBranch: null,
+          featureBranchName: null,
+          suggestedBranchName: null,
+          recentComments: [],
+        },
       };
     }
     case "context": {
@@ -156,11 +181,11 @@ export async function handleCard(state: CommandState, args: string[]) {
         card: { type: "string" },
         agent: { type: "string" },
       });
-      const cardRef = (parsed.values.card as string | undefined) ?? parsed.positionals[0];
+      const cardRef = requireString(parsed.values, "card");
       const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
       return {
         __render: "card-context",
-        data: await buildCardContext(state, requireString({ card: cardRef }, "card"), agentId),
+        data: await buildCardContext(state, cardRef, agentId),
       };
     }
     case "completed-today": {
@@ -241,10 +266,8 @@ export async function handleCard(state: CommandState, args: string[]) {
         agent: { type: "string" },
         noAutoAdvance: { type: "boolean" },
       });
-      const cardId = await resolveCardId(
-        state,
-        (parsed.values.card as string | undefined) ?? parsed.positionals[0]
-      );
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
       const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
       const claimed = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(cardId)}/claim`, {
         agentId,
@@ -267,10 +290,8 @@ export async function handleCard(state: CommandState, args: string[]) {
         status: { type: "string" },
         agent: { type: "string" },
       });
-      const cardId = await resolveCardId(
-        state,
-        (parsed.values.card as string | undefined) ?? parsed.positionals[0]
-      );
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
       const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
       const destination =
         (parsed.values.to as string | undefined)
@@ -309,10 +330,8 @@ export async function handleCard(state: CommandState, args: string[]) {
         agent: { type: "string" },
         clearConflict: { type: "boolean" },
       });
-      const cardId = await resolveCardId(
-        state,
-        (parsed.values.card as string | undefined) ?? parsed.positionals[0]
-      );
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
       const body: Record<string, unknown> = {};
       if (typeof parsed.values.title === "string") body.title = parsed.values.title;
       if (typeof parsed.values.description === "string") body.description = parsed.values.description;
@@ -341,7 +360,7 @@ export async function handleCard(state: CommandState, args: string[]) {
       }
       const updated = await state.client.request<Card>("PATCH", `/cards/${encodeURIComponent(cardId)}`, body);
       return {
-        __render: "card-detail",
+        __render: "card-context",
         data: await buildCardContext(state, updated.id, agentId ?? updated.agentId ?? null),
       };
     }
@@ -351,7 +370,7 @@ export async function handleCard(state: CommandState, args: string[]) {
         body: { type: "string" },
         agent: { type: "string" },
       });
-      const cardRef = (parsed.values.card as string | undefined) ?? parsed.positionals[0];
+      const cardRef = requireString(parsed.values, "card");
       const cardId = await resolveCardId(state, cardRef);
       const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true);
       await state.client.request("POST", `/cards/${encodeURIComponent(cardId)}/comments`, {
@@ -359,10 +378,14 @@ export async function handleCard(state: CommandState, args: string[]) {
         author: "agent",
         agentId: agentId ?? undefined,
       });
-      return { __render: "action", data: { message: `Comment posted on ${cardRef ?? cardId}` } };
+      return { __render: "action", data: { message: `Comment posted on ${cardRef}` } };
     }
     case "diff": {
-      const cardId = await resolveCardId(state, rest[0]);
+      const parsed = parseFlags(rest, {
+        card: { type: "string" },
+      });
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
       const data = await state.client.request("GET", `/cards/${encodeURIComponent(cardId)}/diff`);
       return { __render: "card-diff", data };
     }
@@ -372,7 +395,7 @@ export async function handleCard(state: CommandState, args: string[]) {
         strategy: { type: "string" },
         target: { type: "string" },
       });
-      const cardRef = (parsed.values.card as string | undefined) ?? rest[0];
+      const cardRef = requireString(parsed.values, "card");
       const cardId = await resolveCardId(state, cardRef);
       const result = await state.client.request<Record<string, unknown>>("POST", `/cards/${encodeURIComponent(cardId)}/merge`, {
         strategy: (parsed.values.strategy as string | undefined) ?? undefined,
@@ -380,21 +403,29 @@ export async function handleCard(state: CommandState, args: string[]) {
       });
       const strategy = (parsed.values.strategy as string | undefined) ?? "merge";
       const target = (parsed.values.target as string | undefined) ?? String(result.targetBranch ?? "target");
-      return { __render: "action", data: { message: `Merged ${cardRef ?? cardId} into ${target} (${strategy})` } };
+      return { __render: "action", data: { message: `Merged ${cardRef} into ${target} (${strategy})` } };
     }
     case "recheck-conflicts": {
-      const cardId = await resolveCardId(state, rest[0]);
+      const parsed = parseFlags(rest, {
+        card: { type: "string" },
+      });
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
       const result = await state.client.request<Record<string, unknown>>("POST", `/cards/${encodeURIComponent(cardId)}/recheck-conflicts`);
       const hasConflict = result.conflictedAt ?? result.hasConflict;
       return {
         __render: "action",
-        data: { message: hasConflict ? `Conflicts detected on ${rest[0]}` : `No conflicts on ${rest[0]}` },
+        data: { message: hasConflict ? `Conflicts detected on ${cardRef}` : `No conflicts on ${cardRef}` },
       };
     }
     case "delete": {
-      const cardId = await resolveCardId(state, rest[0]);
+      const parsed = parseFlags(rest, {
+        card: { type: "string" },
+      });
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
       await state.client.request("DELETE", `/cards/${encodeURIComponent(cardId)}`);
-      return { __render: "action", data: { message: `Deleted ${rest[0]}` } };
+      return { __render: "action", data: { message: `Deleted ${cardRef}` } };
     }
     case "deps":
     case "dependencies":
@@ -416,7 +447,11 @@ export async function handleDependencies(state: CommandState, args: string[]) {
       return { __render: "dep-board", data };
     }
     case "list": {
-      const cardId = await resolveCardId(state, rest[0]);
+      const parsed = parseFlags(rest, {
+        card: { type: "string" },
+      });
+      const cardRef = requireString(parsed.values, "card");
+      const cardId = await resolveCardId(state, cardRef);
       const data = await state.client.request("GET", `/cards/${encodeURIComponent(cardId)}/dependencies`);
       return { __render: "dep-list", data };
     }
@@ -425,21 +460,21 @@ export async function handleDependencies(state: CommandState, args: string[]) {
         card: { type: "string" },
         blocker: { type: "string" },
       });
-      const cardRef = (parsed.values.card as string | undefined) ?? parsed.positionals[0];
+      const cardRef = requireString(parsed.values, "card");
       const cardId = await resolveCardId(state, cardRef);
       const blockerRef = requireString(parsed.values, "blocker");
       const blockerId = (await resolveCardRecord(state, blockerRef)).id;
       await state.client.request("POST", `/cards/${encodeURIComponent(cardId)}/dependencies`, {
         blockerCardId: blockerId,
       });
-      return { __render: "action", data: { message: `Dependency added: ${blockerRef} blocks ${cardRef ?? cardId}` } };
+      return { __render: "action", data: { message: `Dependency added: ${blockerRef} blocks ${cardRef}` } };
     }
     case "remove": {
       const parsed = parseFlags(rest, {
         card: { type: "string" },
         blocker: { type: "string" },
       });
-      const cardRef = (parsed.values.card as string | undefined) ?? parsed.positionals[0];
+      const cardRef = requireString(parsed.values, "card");
       const cardId = await resolveCardId(state, cardRef);
       const blockerRef = requireString(parsed.values, "blocker");
       const blockerId = (await resolveCardRecord(state, blockerRef)).id;
@@ -447,7 +482,7 @@ export async function handleDependencies(state: CommandState, args: string[]) {
         "DELETE",
         `/cards/${encodeURIComponent(cardId)}/dependencies/${encodeURIComponent(blockerId)}`
       );
-      return { __render: "action", data: { message: `Dependency removed: ${blockerRef} → ${cardRef ?? cardId}` } };
+      return { __render: "action", data: { message: `Dependency removed: ${blockerRef} -> ${cardRef}` } };
     }
     default:
       throw new CliError(`Unknown dependency command "${action}". Run "agentboard dep help" for usage.`);

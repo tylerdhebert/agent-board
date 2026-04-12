@@ -48,7 +48,7 @@ export async function handleStart(state: CommandState, args: string[]) {
     ? []
     : await state.client.request<QueueMessage[]>(
         "GET",
-        `/queue${toQueryString({ agentId, status: "pending" })}`
+        `/queue${toQueryString({ agentId, status: "pending", author: "user" })}`
       );
 
   const statuses = await loadStatuses(state);
@@ -59,6 +59,7 @@ export async function handleStart(state: CommandState, args: string[]) {
       card: claimed,
       statusName: statuses.find((status) => status.id === claimed.statusId)?.name ?? claimed.statusId,
       inboxCount: inbox.length,
+      inboxMessages: inbox,
     },
   };
 }
@@ -104,6 +105,7 @@ export async function handlePlan(state: CommandState, args: string[]) {
   }
   await state.client.request("PATCH", `/cards/${encodeURIComponent(cardId)}`, {
     plan: body,
+    latestUpdate: body,
   });
   await postAgentComment(state, cardId, agentId, body);
   return { __render: "action", data: { message: `Plan set on ${parsed.values.card as string | undefined ?? cardId}` } };
@@ -154,7 +156,7 @@ export async function handleFinish(state: CommandState, args: string[]) {
   });
   const inbox = await state.client.request<QueueMessage[]>(
     "GET",
-    `/queue${toQueryString({ agentId, status: "pending" })}`
+    `/queue${toQueryString({ agentId, status: "pending", author: "user" })}`
   );
 
   const statuses = await loadStatuses(state);
@@ -165,6 +167,7 @@ export async function handleFinish(state: CommandState, args: string[]) {
       card: updated,
       statusName: statuses.find((status) => status.id === updated.statusId)?.name ?? updated.statusId,
       inboxCount: inbox.length,
+      inboxMessages: inbox,
     },
   };
 }

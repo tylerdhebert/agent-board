@@ -13,6 +13,7 @@ export function KanbanColumn({ workflowStatus, cards, blockedCardIds }: Props) {
     name: workflowStatus.name,
     color: workflowStatus.color,
     position: workflowStatus.position,
+    isCore: true,
     createdAt: "",
   };
 

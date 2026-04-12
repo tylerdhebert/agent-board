@@ -57,6 +57,7 @@ export function initDb() {
       name TEXT NOT NULL UNIQUE,
       color TEXT NOT NULL,
       position INTEGER NOT NULL DEFAULT 0,
+      is_core INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
@@ -159,6 +160,7 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS input_requests (
       id TEXT PRIMARY KEY,
       card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+      agent_id TEXT,
       previous_status_id TEXT,
       questions TEXT NOT NULL,
       answers TEXT,
@@ -215,8 +217,22 @@ export function initDb() {
   sqlite.run(`DROP TABLE IF EXISTS transition_rules`);
 
   // Lightweight schema migration for existing databases.
+  let addedStatusIsCore = false;
+  try {
+    sqlite.run(`ALTER TABLE statuses ADD COLUMN is_core INTEGER NOT NULL DEFAULT 0`);
+    addedStatusIsCore = true;
+  } catch {
+    // Column already exists.
+  }
+
   try {
     sqlite.run(`ALTER TABLE input_requests ADD COLUMN previous_status_id TEXT`);
+  } catch {
+    // Column already exists.
+  }
+
+  try {
+    sqlite.run(`ALTER TABLE input_requests ADD COLUMN agent_id TEXT`);
   } catch {
     // Column already exists.
   }
@@ -263,6 +279,10 @@ export function initDb() {
     // Column already exists.
   }
 
+  if (addedStatusIsCore) {
+    sqlite.run(`UPDATE statuses SET is_core = 1`);
+  }
+
   try {
     sqlite.run(`ALTER TABLE repos DROP COLUMN compare_base`);
   } catch {
@@ -301,13 +321,13 @@ export function initDb() {
   const existing = db.select().from(statuses).all();
   if (existing.length === 0) {
     const seed = [
-      { id: randomUUID(), name: "To Do",          color: "#64748b", position: 0 },
-      { id: randomUUID(), name: "In Progress",    color: "#3b82f6", position: 1 },
-      { id: randomUUID(), name: "In Review",      color: "#a855f7", position: 2 },
-      { id: randomUUID(), name: "Needs Revision", color: "#f59e0b", position: 3 },
-      { id: randomUUID(), name: "Blocked",        color: "#ef4444", position: 4 },
-      { id: randomUUID(), name: "Done",           color: "#22c55e", position: 5 },
-      { id: randomUUID(), name: "Ready to Merge", color: "#f97316", position: 6 },
+      { id: randomUUID(), name: "To Do",          color: "#64748b", position: 0, isCore: true },
+      { id: randomUUID(), name: "In Progress",    color: "#3b82f6", position: 1, isCore: true },
+      { id: randomUUID(), name: "In Review",      color: "#a855f7", position: 2, isCore: true },
+      { id: randomUUID(), name: "Needs Revision", color: "#f59e0b", position: 3, isCore: true },
+      { id: randomUUID(), name: "Blocked",        color: "#ef4444", position: 4, isCore: true },
+      { id: randomUUID(), name: "Done",           color: "#22c55e", position: 5, isCore: true },
+      { id: randomUUID(), name: "Ready to Merge", color: "#f97316", position: 6, isCore: true },
     ];
     for (const s of seed) {
       db.insert(statuses).values(s).run();

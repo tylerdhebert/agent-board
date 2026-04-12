@@ -9,6 +9,7 @@ export const statuses = sqliteTable("statuses", {
   name: text("name").notNull().unique(),
   color: text("color").notNull(), // hex color string e.g. "#6366f1"
   position: integer("position").notNull().default(0),
+  isCore: integer("is_core", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -150,6 +151,7 @@ export const inputRequests = sqliteTable("input_requests", {
   cardId: text("card_id")
     .notNull()
     .references(() => cards.id, { onDelete: "cascade" }),
+  agentId: text("agent_id"),
   previousStatusId: text("previous_status_id"),
   questions: text("questions").notNull(), // JSON string
   answers: text("answers"), // JSON string, null until answered

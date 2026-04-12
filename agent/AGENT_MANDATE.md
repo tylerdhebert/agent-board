@@ -8,16 +8,71 @@ Preferred interface:
 agentboard ...
 ```
 
-Use the CLI by default. The CLI workflow is defined in `AGENT_CLI.md`. Raw HTTP semantics are defined in `AGENT_API.md`.
+Use the CLI by default. Run `agentboard help` for the full command reference. Raw HTTP semantics are defined in `AGENT_API.md`.
 
 ## Core obligations
 
 - Never begin meaningful work without a card.
 - Never leave a card in a misleading status.
-- Never change status through the raw API without including `agentId`.
+- Never change status through the raw API without including `agentId`. (The server accepts status changes without `agentId`; this is a protocol obligation enforced by agent discipline, not by the server.)
 - Never ask a human for a blocking decision in free text when `input request` should be used.
 - Never go silent on an active card for long stretches.
 - Never merge your own worktree branch unless you are explicitly acting as the orchestrator or human operator.
+
+## Role ownership model
+
+Default multi-agent chain:
+
+`planner -> orchestrator -> board-agent -> implementer/reviewer`
+
+Role responsibilities:
+
+- `planner`: decomposes work into tasks and sequencing intent.
+- `orchestrator`: dispatches work and coordinates cross-agent handoffs.
+- `board-agent`: creates cards, wires dependencies, assigns execution IDs, and prepares assignment tickets for orchestrator/runtime dispatch.
+- `implementer` and `reviewer`: execute assigned cards and manage their own card lifecycle truthfully (`start`, `plan`, `checkpoint`, `move`, `input request`, `finish`).
+
+Board-agent should not micromanage every status transition on active execution cards. Implementers/reviewers own truthful status updates on cards assigned to them.
+
+## Agent ID policy
+
+When board-agent is active, ID assignment is controlled by board-agent.
+
+Control roles (`planner`, `orchestrator`, `board-agent`) should use request-scoped IDs:
+
+- Format: `{role}-{request-slug}-{n}`
+- Examples:
+  - `orchestrator-q2-rollout-1`
+  - `planner-q2-rollout-1`
+  - `board-agent-q2-rollout-1`
+
+Worker execution roles should remain task/card-based:
+
+- card-backed work: `{role}-{card-ref}` (for example `implementer-card-142`, `reviewer-card-142`)
+- direct worker fallback (no board-agent): `{role}-{task-slug}-{n}` (for example `implementer-auth-flow-1`)
+
+When no board-agent is active (direct user-to-agent execution), the executing agent may choose its own ID:
+
+- Format: `{role}-{task-slug}-{n}`
+- Example: `implementer-auth-flow-1`
+- `n` is the next available index when matching IDs already exist.
+
+Stability rule:
+
+- Once an agent ID is chosen for a card/turn thread, do not rename it mid-execution.
+- Always use `agentboard id suggest` to choose an ID. The server does not prevent duplicate agent IDs — collision avoidance is the agent's responsibility.
+
+Helper command:
+
+```bash
+agentboard id suggest --role orchestrator --control --request q2-rollout
+agentboard id suggest --role planner --control --request q2-rollout
+agentboard id suggest --role board-agent --control --request q2-rollout
+agentboard id suggest --role implementer --card card-142
+agentboard id suggest --role reviewer --card card-142
+agentboard id suggest --role conflict-resolver --card card-142
+agentboard id suggest --role implementer --task "auth flow"
+```
 
 ## Required turn flow
 
@@ -81,10 +136,16 @@ agentboard cards move --card <card-ref> --agent <agent-id> --status "In Review"
 agentboard dep add --card <blocked-card-ref> --blocker <blocker-card-ref>
 ```
 
+- Survey the full blocker graph when you need a board-wide ready-work view:
+
+```bash
+agentboard dep board
+```
+
 - Request human decisions through the input system for the active card:
 
 ```bash
-agentboard input request --card <card-ref> --prompt "Should I overwrite the config?" --type yesno
+agentboard input request --card <card-ref> --agent <agent-id> --prompt "Should I overwrite the config?" --type yesno
 ```
 
 - Use the narrowest question type that matches the blocker:
@@ -92,11 +153,13 @@ agentboard input request --card <card-ref> --prompt "Should I overwrite the conf
   - `choice` when the valid answers come from a known finite list
   - `text` only when the answer is genuinely open-ended
 
-- Use queue messages for direct conversation:
+- Use queue only for user-facing communication:
 
 ```bash
-agentboard queue reply --agent <agent-id> "I am blocked on the schema decision."
+agentboard queue reply --agent <agent-id> "I am blocked and waiting on your decision."
 ```
+
+- Do not use queue for agent-to-agent coordination.
 
 - If branch or worktree state matters, create or resume it through the board:
 
@@ -133,11 +196,14 @@ agentboard cards recheck-conflicts --card <card-ref>
 ## Communication rules
 
 - Poll your inbox at the start and end of every turn.
-- Use queue threads for direct conversation.
+- Inbox means unread user-authored queue messages for your exact `agentId`.
+- An empty inbox means the user has not sent that exact agent any unread messages.
+- Use queue threads for user-visible updates and replies only.
 - Use card comments or checkpoints for progress narration tied to a task.
 - Use `input request` when the blocker is a decision, approval, or missing human input.
 - After issuing `input request`, you must wait for an answer or for the request to time out.
 - Creating a blocking input request and then ending the turn without waiting is a protocol violation.
+- If a waiting turn is interrupted, recover with: `agentboard input list --status pending --card <card>` to find the request, then `agentboard input wait <request-id>` to resume waiting.
 - Do not bury blockers in free-text commentary while leaving the card in `In Progress`.
 
 ## Worktree and branch rules
@@ -152,17 +218,18 @@ agentboard cards recheck-conflicts --card <card-ref>
 
 - There is no saved CLI session or per-repo context.
 - There is no implicit agent/card environment fallback.
-- Pass `--agent` and `--card` explicitly on the command that needs them.
-- If a waiting turn is interrupted, recover with `agentboard input wait <request-id>` or inspect pending requests with `agentboard input list`.
+- `--agent` and `--card` are per-command flags. Place them after the subcommand (for example: `agentboard cards move --card card-142 --agent implementer-1 --to "In Review"`).
+- `--url` and `--json` are global flags and may appear before or after the command name.
 
 ## Reading CLI output
 
 CLI output is structured text by default (not raw JSON).
 
 - Lists print table headers and rows, for example: `REF  STATUS  TITLE  AGENT  UPDATED`
-- Single records print `key: value` lines with empty fields omitted
-- Mutations confirm with a short action line
-- `cards context` includes `Conflicted: yes (since Xh)` and `Recent comments:` when applicable
+- Single records print `key: value` lines with empty fields omitted. For `cards context`, omitted fields (description, plan, latest update, blockers, etc.) mean the value is empty or false — not that it failed to load.
+- Most mutations confirm with a short action line. Exception: `cards update` returns the full post-update card context so you can verify the result without a follow-up `cards context` call.
+- `cards context` always shows `Blocked:` and `Waiting on input:` (even when false). Optional fields only appear when set.
+- `cards get` returns a concise summary (ref, title, status, agent, feature, epic, timestamps). Use `cards context` for the full operational picture before touching code.
 
 Use `--json` when you need to extract specific fields programmatically:
 
@@ -177,7 +244,7 @@ These are protocol violations:
 - coding without a claimed or active card
 - completing work without updating the board
 - asking for a human decision outside `input request` when the decision blocks progress
-- moving status through the raw API without `agentId`
+- moving status through the raw API without `agentId` (agent discipline — the server does not reject this, but it violates the protocol)
 - leaving blocked work undocumented
 - leaving a branch-backed card in a misleading non-handoff state
 

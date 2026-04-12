@@ -7,25 +7,25 @@ Use this role when one agent is responsible for keeping the board accurate and a
 - Keep board state truthful and current.
 - Decompose planned work into clear, assignable cards.
 - Wire dependencies early.
-- Coordinate queue messages between agents.
+- Assign execution agent IDs when creating/dispatching cards.
+- Keep user-visible updates clear in queue replies when needed.
 - Keep worktree hygiene clean for parallel work.
 
 Avoid doing implementation unless explicitly asked to switch roles.
 
 ## Canonical operating loop
 
-Check message backlog:
+Choose a request-scoped control ID first:
 
 ```bash
-agentboard queue conversations
-agentboard inbox --agent board-agent
+agentboard id suggest --role board-agent --control --request q2-rollout
+# example result: board-agent-q2-rollout-1
 ```
 
-`queue conversations` output example:
+Check your unread user messages:
 
-```text
-AGENT          UNREAD  LAST
-implementer-1  3       Fix the auth flow please
+```bash
+agentboard inbox --agent board-agent-q2-rollout-1
 ```
 
 Review active work:
@@ -34,29 +34,91 @@ Review active work:
 agentboard cards list
 agentboard cards list --status "Blocked"
 agentboard cards list --status "In Progress"
+agentboard cards list --unblocked
 ```
+
+`--unblocked` filters to cards with no active blockers — use it to find work that is ready to assign or pick up.
 
 `cards list` output example:
 
 ```text
-REF      STATUS       TITLE                AGENT          UPDATED
-card-1   In Progress  Fix auth middleware  implementer-1  2m
+REF      STATUS       TITLE                AGENT                 UPDATED
+card-1   In Progress  Fix auth middleware  implementer-card-1   2m
 ```
 
 For cards needing intervention, inspect context:
 
 ```bash
-agentboard cards context --card card-142 --agent board-agent
+agentboard cards context --card card-142 --agent board-agent-q2-rollout-1
 ```
 
 Take corrective board action:
 
 ```bash
-agentboard cards update card-142 --latest-update "Waiting on schema decision from orchestrator."
-agentboard cards update card-142 --blocked-reason "Need decision on migration direction."
+agentboard cards update --card card-142 --agent board-agent-q2-rollout-1 --latest-update "Waiting on schema decision from orchestrator."
+agentboard cards update --card card-142 --agent board-agent-q2-rollout-1 --blocked-reason "Need decision on migration direction."
 agentboard dep add --card card-144 --blocker card-142
-agentboard queue send --agent implementer-2 --body "Start card-145 while card-144 waits on card-142." --author board-agent
 ```
+
+Include `--agent` on `cards update` commands so board narration stays attributable even when the mutation does not change status.
+
+## Assignment and identity contract
+
+- Board-agent owns execution ID assignment when creating and dispatching cards.
+- Board-agent itself should use a request-scoped control ID:
+  - `{role}-{request-slug}-{n}` (for example `board-agent-q2-rollout-1`)
+- Use card-derived IDs for execution roles:
+  - `implementer-card-<card-ref>`
+  - `reviewer-card-<card-ref>`
+- Include assigned card ref and expected agent ID in assignment tickets for orchestrator.
+- After dispatch, implementer/reviewer owns execution-state changes for that card (`start`, `plan`, `checkpoint`, `move`, `input request`, `finish`).
+- Board-agent owns cross-card hygiene (dependency truth, stale assignments, rerouting) rather than micromanaging each worker status update.
+
+Recommended helper:
+
+```bash
+agentboard id suggest --role board-agent --control --request q2-rollout
+agentboard id suggest --role implementer --card card-142
+agentboard id suggest --role reviewer --card card-142
+```
+
+### Required handoff ticket format (to orchestrator)
+
+When orchestrator asks for ready work, board-agent should return one ticket per spawnable unit through the orchestration runtime handoff path.
+
+Required fields per ticket:
+
+- `card_ref`
+- `agent_id`
+- `role`
+- `spawn_next`
+- `depends_on` (`none` when unblocked)
+
+Canonical ticket example:
+
+```text
+card_ref: card-142
+agent_id: implementer-card-142
+role: implementer
+spawn_next: Run start + plan, then execute card-142.
+depends_on: none
+```
+
+Multiple tickets should be sent as a numbered list in a single handoff payload so orchestrator can pick the next ready spawn quickly.
+
+Canonical response example:
+
+```text
+ASSIGNMENT TICKETS
+1) card_ref=card-142 | agent_id=implementer-card-142 | role=implementer | spawn_next="Run start + plan, then execute card-142." | depends_on=none
+2) card_ref=card-143 | agent_id=reviewer-card-143 | role=reviewer | spawn_next="Begin review after implementer handoff is present." | depends_on=card-142
+```
+
+Ticket hygiene rules:
+
+- Do not omit `agent_id` or `card_ref`.
+- Do not send tickets for blocked cards as ready.
+- Keep `depends_on` truthful to board dependencies.
 
 ## Worktree workflow handling
 
@@ -72,15 +134,15 @@ agentboard queue send --agent implementer-2 --body "Start card-145 while card-14
 Create worktrees for parallel cards under one feature:
 
 ```bash
-agentboard worktree create --card card-142 --repo agent-board --agent implementer-1
-agentboard worktree create --card card-143 --repo agent-board --agent implementer-2
+agentboard worktree create --card card-142 --repo agent-board --agent implementer-card-142
+agentboard worktree create --card card-143 --repo agent-board --agent implementer-card-143
 ```
 
 The board agent can verify branch/worktree alignment from card context:
 
 ```bash
-agentboard cards context --card card-142 --agent board-agent
-agentboard cards context --card card-143 --agent board-agent
+agentboard cards context --card card-142 --agent board-agent-q2-rollout-1
+agentboard cards context --card card-143 --agent board-agent-q2-rollout-1
 ```
 
 If a card is closed or abandoned, clean up its worktree branch:
@@ -91,8 +153,9 @@ agentboard worktree remove --repo agent-board --card card-142
 
 ### Base branch input protocol
 
-Base branch selection should be explicit when branch choice is risky or ambiguous.
-When the target base is clear, rely on normal `worktree create` defaults.
+Board-agent should always request explicit base-branch input before creating a worktree.
+Treat this as a blocking decision point: wait for an answer or timeout before proceeding.
+The CLI does not enforce this — it is a role protocol. The `--base` flag is optional and the CLI will fall back to defaults if omitted. Always request user input first when acting as board-agent.
 
 Default base resolution order:
 
@@ -103,17 +166,19 @@ Default base resolution order:
 Check context before creating a worktree:
 
 ```bash
-agentboard cards context --card card-142 --agent board-agent
+agentboard cards context --card card-142 --agent board-agent-q2-rollout-1
 ```
 
-Ask for human input only when branch choice is not obvious or has elevated risk:
+Always ask for base branch first:
 
 ```bash
-agentboard input request --card card-142 \
-  --prompt "Which branch should I base this worktree off? Default: dev" \
-  --type text --timeout 300
-agentboard worktree create --card card-142 --repo agent-board --agent implementer-1 --base <response>
+agentboard input request --card card-142 --agent board-agent-q2-rollout-1 --prompt "Which branch should I base this worktree off? Default: dev" --type text --timeout 300
+agentboard worktree create --card card-142 --repo agent-board --agent implementer-card-142 --base <response>
 ```
+
+If the request times out without a response, continue using the default base resolution order above.
+
+When `worktree create` succeeds, record both the card branch and the resolved base branch in your handoff or checkpoint text. If the command reports that an existing branch was reused, say that the original base branch was not determined by this call.
 
 ## Status discipline
 
@@ -135,20 +200,16 @@ For branch-backed work under worktree workflows, `Ready to Merge` is the merge-r
 
 ## Conflict escalation
 
-When a card has `conflictedAt` set (visible in card context output), dispatch the conflict resolver:
+When a card has `conflictedAt` set (visible in card context output), prepare a resolver ticket for orchestrator:
 
 ```bash
-agentboard queue send \
-  --agent conflict-resolver \
-  --body "card-142 has recorded merge conflicts. Please resolve and post a handoff summary when done." \
-  --author board-agent
+agentboard cards update --card card-142 --agent board-agent-q2-rollout-1 --latest-update "Conflict detected; resolver ticket prepared for orchestrator dispatch."
 ```
 
 After dispatching, monitor the card with `cards context`. When the output no longer includes `Conflicted:` and shows `Handoff:` set, the resolver is done. Advance the card to the appropriate next status:
 
 ```bash
-agentboard cards move --card card-142 --agent board-agent --to "In Review"
+agentboard cards move --card card-142 --agent board-agent-q2-rollout-1 --to "In Review"
 ```
 
 Do not clear conflicts or attempt resolution yourself — that is the conflict resolver's job.
-

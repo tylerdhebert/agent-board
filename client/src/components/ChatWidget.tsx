@@ -77,7 +77,7 @@ function ChatThreadWindow({ agentId, unread, onClose }: ThreadWindowProps) {
 
   return (
     <div
-      className={`surface-panel surface-panel--raised flex w-[336px] max-w-[calc(100vw-2rem)] shrink-0 flex-col overflow-hidden rounded-b-none border-b-0 shadow-2xl ${
+      className={`pointer-events-auto surface-panel surface-panel--raised flex w-[336px] max-w-[calc(100vw-2rem)] shrink-0 flex-col overflow-hidden rounded-b-none border-b-0 shadow-2xl ${
         unread > 0 ? "chat-bar-glow" : ""
       }`}
       style={{ height: collapsed ? "auto" : 400 }}
@@ -302,12 +302,12 @@ export function ChatWidget({ embedded = false }: { embedded?: boolean }) {
   } as CSSProperties;
 
   const threadDockClass = embedded
-    ? "fixed bottom-4 left-4 right-4 z-40 overflow-x-auto"
-    : "fixed bottom-[calc(var(--chat-dock-offset)+0.75rem)] left-0 right-0 z-40 overflow-x-auto md:bottom-[calc(var(--chat-dock-offset)+1.25rem)]";
+    ? "pointer-events-none fixed bottom-4 left-4 right-4 z-40 overflow-x-auto"
+    : "pointer-events-none fixed bottom-[calc(var(--chat-dock-offset)+0.75rem)] left-0 right-0 z-40 overflow-x-auto md:bottom-[calc(var(--chat-dock-offset)+1.25rem)]";
 
   const mainDockClass = embedded
-    ? "w-full"
-    : "fixed bottom-[calc(var(--chat-dock-offset)+0.75rem)] left-0 z-40 w-[468px] max-w-full px-3 md:bottom-[calc(var(--chat-dock-offset)+1.25rem)] md:px-4";
+    ? "pointer-events-none w-full"
+    : "pointer-events-none fixed bottom-[calc(var(--chat-dock-offset)+0.75rem)] left-0 z-40 w-[468px] max-w-full px-3 md:bottom-[calc(var(--chat-dock-offset)+1.25rem)] md:px-4";
 
   const mainPanelClass = embedded
     ? "surface-panel surface-panel--soft overflow-hidden"
@@ -317,7 +317,7 @@ export function ChatWidget({ embedded = false }: { embedded?: boolean }) {
     <>
       {openThreads.length > 0 && (
         <div className={threadDockClass} style={dockOffsetStyle}>
-          <div className={`flex min-w-max items-end gap-3 ${embedded ? "" : "px-4"}`}>
+          <div className={`pointer-events-none flex min-w-max items-end gap-3 ${embedded ? "" : "px-4"}`}>
             {!embedded && <div className="w-[468px] max-w-full shrink-0" />}
 
             {openThreads.slice(0, 3).map((agentId) => {
@@ -341,7 +341,7 @@ export function ChatWidget({ embedded = false }: { embedded?: boolean }) {
               const hasUnread = overflowUnread > 0;
 
               return (
-                <div ref={overflowRef} className="relative shrink-0">
+                <div ref={overflowRef} className="pointer-events-auto relative shrink-0">
                   {overflowOpen && (
                     <div
                       className="surface-panel surface-panel--raised absolute bottom-[calc(100%+8px)] left-0 w-[220px] overflow-hidden shadow-2xl"
@@ -383,7 +383,7 @@ export function ChatWidget({ embedded = false }: { embedded?: boolean }) {
 
       <div className={mainDockClass} style={embedded ? undefined : dockOffsetStyle}>
         {chatOpen && (
-          <div className={mainPanelClass}>
+          <div className={`pointer-events-auto ${mainPanelClass}`}>
             <div
               className="flex cursor-pointer items-center justify-between border-b border-[var(--border-soft)] px-4 py-3"
               onClick={() => setChatOpen(false)}
@@ -543,7 +543,7 @@ export function ChatWidget({ embedded = false }: { embedded?: boolean }) {
           <button
             type="button"
             onClick={() => setChatOpen(!chatOpen)}
-            className={`surface-panel flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--panel-hover)] ${
+            className={`pointer-events-auto surface-panel flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--panel-hover)] ${
               embedded
                 ? "surface-panel--soft"
                 : "rounded-b-none border-b-0 shadow-2xl"

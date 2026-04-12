@@ -19,11 +19,11 @@ mkdir -p "$destination"
 destination="$(cd "$destination" && pwd)"
 
 files=(
-  "AGENT_CLI.md"
   "AGENT_MANDATE.md"
   "AGENT_API.md"
   "ORCHESTRATOR.md"
   "BOARD_AGENT.md"
+  "CONFLICT_RESOLVER.md"
 )
 
 for file in "${files[@]}"; do
