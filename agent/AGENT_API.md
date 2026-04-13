@@ -195,8 +195,7 @@ POST /cards/:id/claim
 
 POST /cards/:id/move
 {
-  "statusId": "status-id",
-  "agentId": "implementer-1"
+  "statusId": "status-id"
 }
 
 PATCH /cards/:id
@@ -226,7 +225,7 @@ Critical behavior:
 - Moving a card to `Done` stamps `completedAt`.
 - Moving a card away from `Done` clears `completedAt`.
 - `PATCH /cards/:id` updates metadata fields only.
-- When an agent changes workflow status through the raw API, use `POST /cards/:id/move` and include `agentId` as the acting agent. Ownership remains on the card until `/claim` changes it.
+- `POST /cards/:id/move` accepts an optional `agentId` field but does not store it. Ownership remains on the card until `/claim` changes it.
 
 ### Comments
 
@@ -386,7 +385,7 @@ Notes:
 ```
 
 - Agents using the CLI should issue `input request` and then wait for an answer or a timeout. They must not continue work past the blocking decision.
-- Agents using the raw API or low-level SDK helpers must follow the same rule: creating the request is not enough. They must immediately wait on that same request id until it is answered or timed out before continuing or ending the turn.
+- Agents using the raw API or low-level HTTP clients must follow the same rule: creating the request is not enough. They must immediately wait on that same request id until it is answered or timed out before continuing or ending the turn.
 - Detached creation is an implementation detail for resilient waiting and recovery, not permission to fire-and-forget a blocking question.
 
 ## Queue and communication

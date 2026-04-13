@@ -4,7 +4,7 @@ This repo no longer treats conflict resolution as a separate card-owning worker 
 
 Use the repo-local skill instead:
 
-`[.claude/skills/conflict-resolution/SKILL.md](/C:/Users/Tyler/documents/projects/agent-board/.claude/skills/conflict-resolution/SKILL.md)`
+`.claude/skills/conflict-resolution/SKILL.md`
 
 Current protocol:
 

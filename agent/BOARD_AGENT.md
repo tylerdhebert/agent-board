@@ -205,7 +205,7 @@ When a card has `conflictedAt` set, route the repair work back to the card owner
 
 Point the implementer at the repo-local skill:
 
-`[.claude/skills/conflict-resolution/SKILL.md](/C:/Users/Tyler/documents/projects/agent-board/.claude/skills/conflict-resolution/SKILL.md)`
+`.claude/skills/conflict-resolution/SKILL.md`
 
 Use card comments or queue replies to make the handoff explicit, then monitor the card until the owner clears the conflict and records the outcome.
 

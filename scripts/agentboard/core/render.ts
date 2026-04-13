@@ -153,6 +153,12 @@ function renderTaskflow(data: unknown): string {
   ];
   if (card?.title) lines.push(`Title: ${String(card.title)}`);
   if (payload.statusName) lines.push(`Status: ${String(payload.statusName)}`);
+  if (card?.branchName) {
+    lines.push(`Branch: ${String(card.branchName)}`);
+    if (payload.action === "Started") {
+      lines.push(`Note: finish will auto-select "Ready to Merge" for this branch-backed card. Use --status "Done" to override.`);
+    }
+  }
   if (typeof payload.inboxCount === "number") lines.push(`Inbox: ${payload.inboxCount} pending`);
   if (inboxMessages.length > 0) {
     lines.push("Inbox messages:");

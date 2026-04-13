@@ -464,7 +464,7 @@ export async function handleWorktree(state: CommandState, args: string[]) {
         ?? (await getCard(state, parsed.values.card as string | undefined).catch(() => null))?.branchName
         ?? null;
       if (!branchName) {
-        throw new CliError("Usage: agentboard worktree remove <branchName> --repo <repo> or use --branch / --card with a branch-backed card.");
+        throw new CliError("Usage: agentboard worktree remove --branch <branch> --repo <repo>  or  agentboard worktree remove --card <card> --repo <repo>");
       }
       const repoId = await resolveRepoId(state, requireString(parsed.values, "repo"));
       await state.client.request(

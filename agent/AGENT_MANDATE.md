@@ -106,6 +106,7 @@ agentboard bootstrap --epic "..." --feature "..." --title "..."
 - Use `cards create` only when the epic and feature already exist.
 
 ```bash
+agentboard feature list          # find the feature ref (e.g. feat-12)
 agentboard cards create --feature <feature-ref> --title "..."
 agentboard start --agent <agent-id> --card <card-ref>
 ```

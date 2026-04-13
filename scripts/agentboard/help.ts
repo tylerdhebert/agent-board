@@ -23,8 +23,12 @@ Global options:
   --json        Force JSON output on any command
 
 ────────────────────────────────────────────────────────────────
-HOT PATH — most agent turns only need these six commands
+HOT PATH — most agent turns only need these commands
 ────────────────────────────────────────────────────────────────
+
+  # 0) No card yet? Create one first (reuses existing epic/feature by title match):
+  agentboard bootstrap --epic "My Epic" --feature "My Feature" --title "Card title"
+  #    Then start it: agentboard start --agent <agent-id> --card <card-ref>
 
   # 1) Check queue for assignments and messages
   agentboard inbox --agent <agent-id>
