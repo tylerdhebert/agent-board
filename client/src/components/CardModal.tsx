@@ -41,7 +41,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
 
   const updateStatusMutation = useMutation({
     mutationFn: async (statusId: string) => {
-      const { data } = await api.api.cards({ id: selectedCardId! }).patch({ statusId });
+      const { data } = await (api.api.cards({ id: selectedCardId! }) as any).move.post({ statusId });
       return data!;
     },
     onSuccess: () => {
@@ -142,7 +142,7 @@ export function CardModal({ statuses, workflowStatuses }: Props) {
 
   const clearConflictMutation = useMutation({
     mutationFn: async () => {
-      await api.api.cards({ id: selectedCardId! }).patch({ conflictedAt: null } as any);
+      await api.api.cards({ id: selectedCardId! }).patch({ conflictedAt: null, conflictDetails: null } as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cards"] });

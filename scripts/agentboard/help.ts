@@ -16,7 +16,7 @@ CLI-first interface for the running agent-board server.
 Setup:
   bun link                         one-time global install
   agentboard <command> [options]   preferred invocation
-  bun run agentboard -- <command>  fallback without global link
+  bun run agentboard -- <command>  alternate invocation without global link
 
 Global options:
   --url <url>   Override board URL (default: ${DEFAULT_BASE_URL})
@@ -48,7 +48,7 @@ HOT PATH — most agent turns only need these six commands
 CORE CONVENTIONS
 ────────────────────────────────────────────────────────────────
 
-  Explicit-first: no saved session, no sticky context, no implicit agent/card fallback.
+  Explicit-first and stateless: each command stands on its own.
   Pass --agent and --card on every command that needs them.
   --agent and --card are per-command flags: place them after the subcommand.
     correct:   agentboard cards move --card card-142 --agent implementer-1 --to "In Review"
@@ -77,11 +77,11 @@ AGENT ID CONVENTIONS
     Format:   {role}-{request-slug}-{n}
     Examples: orchestrator-q2-rollout-1  board-agent-q2-rollout-1
 
-  Worker roles (implementer, reviewer, conflict-resolver) — card-backed:
+  Worker roles (implementer, reviewer) — card-backed:
     Format:   {role}-{card-ref}
-    Examples: implementer-card-142  reviewer-card-142  conflict-resolver-card-142
+    Examples: implementer-card-142  reviewer-card-142
 
-  When no board-agent is active, self-select a direct fallback ID:
+  When no board-agent is active, self-select a direct execution ID:
     Format:   {role}-{task-slug}-{n}
     Example:  implementer-auth-flow-1
 
@@ -104,7 +104,7 @@ TOP-LEVEL COMMANDS
   plan --card <card> --agent <id> "..."
   checkpoint --card <card> --agent <id> --body "..."
   finish --card <card> --agent <id> [--summary "..."] [--status "Done|Ready to Merge"]
-  bootstrap --epic "..." --feature "..." --title "..." [--agent <id>] [--claim|--no-claim]
+  bootstrap --epic "..." --feature "..." --title "..."
   raw <METHOD> <path> [--body-json <json> | --body-file <path>]
 
 ────────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ ESCAPE HATCHES
   agentboard raw PATCH /cards/<guid> --body-file patch.json
   agentboard --json cards context --card card-142 --agent implementer-1
 
-  Use raw only when the CLI does not already expose what you need.
+  Use raw when you need direct endpoint-level control.
   On Windows/PowerShell, prefer --body-file over --body-json for POST/PATCH payloads.`;
 }
 
@@ -169,7 +169,7 @@ export function taskflowHelp(command: "start" | "plan" | "checkpoint" | "finish"
         `Usage:
   agentboard start --agent <id> --card <card> [--plan "..."] [--skip-inbox] [--no-auto-advance]
 
-Claims the card for the agent and returns pending unread user messages for that agent.
+Sets card ownership to the agent, optionally advances "To Do" to "In Progress", and returns pending unread user messages for that agent.
 
 Flags:
   --plan "..."        Sets the card's plan and latestUpdate fields, and posts it as a comment.
@@ -179,8 +179,7 @@ Flags:
   --skip-inbox        Skip the inbox fetch at the end of start.
 
 Notes:
-  - The server does not enforce ownership. Claiming a card already owned by another agent
-    silently overwrites the agentId. Check ownership with "cards context" first.
+  - Use "cards context" first when you want to confirm the current owner before resuming or reclaiming work.
   - The status shown in the response is the actual status after auto-advance.`
       );
 
@@ -217,7 +216,7 @@ Status selection order:
   1. Explicit --status value (overrides everything)
   2. "Ready to Merge" — auto-selected when the card has both branchName and repoId set,
      and a "Ready to Merge" status exists on the board
-  3. "Done" — fallback when "Ready to Merge" is not available
+  3. "Done" — used when "Ready to Merge" is not available on the board
 
   The Status: line in the response shows the actual status chosen.
   Use --status "Done" to force Done even on a branch-backed card.
@@ -231,19 +230,17 @@ Flags:
       return section(
         "agentboard bootstrap",
         `Usage:
-  agentboard bootstrap --epic "..." --feature "..." --title "..." [--description "..."] [--repo <repo>] [--branch <branch>] [--agent <id>] [--plan "..."] [--claim|--no-claim] [--no-auto-advance]
+  agentboard bootstrap --epic "..." --feature "..." --title "..." [--description "..."] [--repo <repo>] [--branch <branch>] [--plan "..."]
 
 Creates missing epic and feature records, then creates the card.
 Existing epics/features with matching titles are reused, not duplicated.
 
-Claim behavior:
-  --claim       Claims the card (requires --agent)
-  --no-claim    Leaves the card unclaimed
-  (neither)     Claims when --agent is provided, leaves unclaimed otherwise
-
 Flags:
-  --plan "..."         Sets the initial plan on the card (and claims must be active for the comment to post)
-  --no-auto-advance    Suppresses auto-advance from "To Do" to "In Progress" on claim`
+  --plan "..."   Sets the initial plan and latestUpdate fields on the new card.
+
+Notes:
+  - bootstrap creates the board records and leaves the new card ready to be started.
+  - Use "agentboard start --agent <id> --card <card-ref>" when an agent is ready to take ownership.`
       );
   }
 }
@@ -277,13 +274,13 @@ Use dep to express card-to-card blocking relationships. Do not bury blockers in 
     agentboard cards completed-today
 
   Create, claim, and move:
-    agentboard cards create --title "..." --feature <feature> [--status <status>] [--agent <id>] [--claim]
+    agentboard cards create --title "..." --feature <feature> [--status <status>]
     agentboard cards claim --card <card> --agent <id> [--no-auto-advance]
     agentboard cards move --card <card> --to "<status>" --agent <id>
     agentboard cards move --card <card> --status "<status>" --agent <id>
 
   Update first-class fields:
-    agentboard cards update --card <card> [--title ...] [--description ...] [--status ...] [--feature ...] [--type ...]
+    agentboard cards update --card <card> [--title ...] [--description ...] [--feature ...] [--type ...]
     agentboard cards update --card <card> [--plan ...] [--latest-update ...] [--handoff-summary ...] [--blocked-reason ...]
     agentboard cards update --card <card> [--clear-conflict]
 
@@ -302,11 +299,16 @@ Notes:
       pending input requests, recent comments, and suggested branch. Use context before touching code.
 
   cards list flags:
-    - --unblocked filters to cards with no active blockers. Useful for orchestrators finding ready work.
-    - --mine requires --agent since there is no implicit session context.
+    - --unblocked filters to cards with no active blockers. Useful for orchestrators finding dependency-ready work.
+    - --mine filters cards owned by the provided --agent.
 
   cards move flags:
     - --to and --status are equivalent. If both are passed, --to takes priority.
+
+  Ownership and workflow:
+    - start and cards claim set ownership on the card.
+    - cards move changes workflow status and keeps ownership in place.
+    - cards update edits card metadata such as plan, latestUpdate, blockedReason, handoffSummary, and conflict fields.
 
   First-class card fields (prefer these over free-text comments):
     plan, latestUpdate, blockedReason, handoffSummary — all surfaced in cards context output.
@@ -333,7 +335,7 @@ export function communicationHelp(topic: "input" | "queue") {
 Question types:
   yesno    Binary yes/no decision. Use only for true binary decisions.
   choice   Finite list of options. Supply with --option "..." for each option.
-  text     Open-ended answer. Use only when the answer cannot be enumerated.
+  text     Open-ended answer for information the human needs to write in directly.
 
 Behavior:
   - input request is blocking — the command waits until the human answers or the request times out.
@@ -366,10 +368,8 @@ Recovery (if a waiting turn was interrupted):
 reply vs send:
   - queue reply   THE normal agent outbox command. Agents use this to send messages to the user.
                   Author is always set to the agent's own ID — it will appear as an agent message.
-  - queue send    Posts with an explicit --author. Use only when acting as a system process
-                  or injecting a user-side message. Do NOT use for regular agent replies —
-                  author defaults to "user" when --author is omitted, making it look like a
-                  human message.
+  - queue send    Posts with an explicit --author. Use it for system messages or for injecting
+                  a user-side message with a chosen author identity.
 
 inbox behavior:
   - inbox and queue inbox are identical — both check unread user-authored messages for the exact agent id.
@@ -392,14 +392,13 @@ export function identityHelp() {
 Provide exactly one of --control, --card, or --task:
   --control   Requires --request. Returns indexed control IDs: orchestrator-q2-rollout-1
   --card      Returns deterministic card-backed IDs: implementer-card-142
-  --task      Returns indexed fallback IDs: implementer-auth-flow-1, then -2 on collision
+  --task      Returns indexed direct-execution IDs: implementer-auth-flow-1, then -2 on collision
 
 Examples:
   agentboard id suggest --role orchestrator --control --request q2-rollout
   agentboard id suggest --role board-agent --control --request q2-rollout
   agentboard id suggest --role implementer --card card-142
   agentboard id suggest --role reviewer --card card-142
-  agentboard id suggest --role conflict-resolver --card card-142
   agentboard id suggest --role implementer --task "auth flow"`
   );
 }
@@ -500,7 +499,7 @@ Parallel worktree guidance:
   - One card maps to one worktree branch. Do not share implementation branches between agents.
   - Multiple agents working on the same feature should each claim a different card
     and create a different worktree branch.
-  - The feature branch is the integration base, not a shared worktree branch.`
+  - The feature branch is the integration base for per-card worktree branches.`
       );
   }
 }

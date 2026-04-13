@@ -28,6 +28,74 @@ function updateCardAndBroadcast(id: string, patch: Record<string, unknown>) {
   return updated;
 }
 
+function applyStatusTransitionSideEffects(cardId: string, updated: typeof cards.$inferSelect, nextStatusId: string) {
+  // Check for merge conflicts when moving to a triggersMerge status
+  if (updated.branchName && updated.repoId) {
+    const epic = updated.epicId
+      ? db.select().from(epics).where(eq(epics.id, updated.epicId)).get()
+      : null;
+    if (epic?.workflowId) {
+      const ws = db.select().from(workflowStatuses)
+        .where(and(
+          eq(workflowStatuses.workflowId, epic.workflowId),
+          eq(workflowStatuses.statusId, nextStatusId)
+        ))
+        .get();
+      if (ws?.triggersMerge) {
+        const repo = db.select().from(repos).where(eq(repos.id, updated.repoId)).get();
+        const feature = updated.featureId
+          ? db.select().from(features).where(eq(features.id, updated.featureId)).get()
+          : null;
+        const targetBranch = feature?.branchName ?? repo?.baseBranch;
+        if (repo && targetBranch) {
+          const baseResult = git(["merge-base", targetBranch, updated.branchName], repo.path);
+          const base = baseResult.stdout.trim();
+          if (base) {
+            const mergeTreeResult = git(
+              ["merge-tree", base, targetBranch, updated.branchName],
+              repo.path
+            );
+            const hasConflicts = mergeTreeResult.stdout.includes("<<<<<<<");
+            if (hasConflicts) {
+              db.update(cards)
+                .set({ conflictedAt: nowIso(), conflictDetails: mergeTreeResult.stdout })
+                .where(eq(cards.id, cardId))
+                .run();
+              const conflicted = db.select().from(cards).where(eq(cards.id, cardId)).get()!;
+              wsManager.broadcast("card:conflicted", conflicted);
+            } else {
+              db.update(cards)
+                .set({ conflictedAt: null, conflictDetails: null })
+                .where(eq(cards.id, cardId))
+                .run();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const newStatus = db.select().from(statuses).where(eq(statuses.id, nextStatusId)).get();
+  if (newStatus?.name.toLowerCase() !== "done") return;
+
+  const doneStatusId = newStatus.id;
+  const blockedByThis = db.select().from(cardDependencies)
+    .where(eq(cardDependencies.blockerCardId, cardId)).all();
+
+  for (const dep of blockedByThis) {
+    const allBlockers = db.select().from(cardDependencies)
+      .where(eq(cardDependencies.blockedCardId, dep.blockedCardId)).all();
+    const allDone = allBlockers.every((b) => {
+      if (b.blockerCardId === cardId) return true;
+      const blockerCard = db.select().from(cards).where(eq(cards.id, b.blockerCardId)).get();
+      return blockerCard?.statusId === doneStatusId;
+    });
+    if (allDone) {
+      wsManager.broadcast("card:unblocked", { cardId: dep.blockedCardId });
+    }
+  }
+}
+
 export const cardRoutes = new Elysia({ prefix: "/cards" })
   // List cards, optional ?status= and ?unblocked= filters
   .get(
@@ -152,7 +220,7 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         title: body.title,
         description: body.description ?? "",
         statusId: body.statusId,
-        agentId: body.agentId ?? null,
+        agentId: null,
         plan: body.plan ?? null,
         latestUpdate: body.latestUpdate ?? null,
         handoffSummary: body.handoffSummary ?? null,
@@ -178,11 +246,44 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
           t.Union([t.Literal("story"), t.Literal("bug"), t.Literal("task")])
         ),
         description: t.Optional(t.String()),
-        agentId: t.Optional(t.String()),
         plan: t.Optional(t.String()),
         latestUpdate: t.Optional(t.String()),
         handoffSummary: t.Optional(t.String()),
         blockedReason: t.Optional(t.String()),
+      }),
+    }
+  )
+  // Move a card through workflow status without changing ownership
+  .post(
+    "/:id/move",
+    ({ params, body, set }) => {
+      const existing = db.select().from(cards).where(eq(cards.id, params.id)).get();
+      if (!existing) {
+        set.status = 404;
+        return { error: "Not found" };
+      }
+
+      const now = nowIso();
+      const status = db.select().from(statuses).where(eq(statuses.id, body.statusId)).get();
+      const completedAt =
+        status?.name.toLowerCase() === "done"
+          ? now
+          : null;
+
+      const updated = updateCardAndBroadcast(params.id, {
+        statusId: body.statusId,
+        completedAt,
+        updatedAt: now,
+      });
+
+      applyStatusTransitionSideEffects(params.id, updated, body.statusId);
+      return serializeCard(updated);
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        statusId: t.String(),
+        agentId: t.Optional(t.String()),
       }),
     }
   )
@@ -245,93 +346,8 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         }
       }
 
-      const now = nowIso();
-
-      // Determine completedAt: stamp when moving to Done, clear when moving away
-      let completedAt: string | null | undefined = undefined;
-      if (typeof patch.statusId === "string") {
-        const status = db.select().from(statuses).where(eq(statuses.id, patch.statusId)).get();
-        if (status) {
-          completedAt = status.name.toLowerCase() === "done" ? now : null;
-        }
-      }
-
-      patch.updatedAt = now;
-      if (completedAt !== undefined) patch.completedAt = completedAt;
-
+      patch.updatedAt = nowIso();
       const updated = updateCardAndBroadcast(params.id, patch);
-
-      // Check for merge conflicts when moving to a triggersMerge status
-      if (typeof patch.statusId === "string" && updated.branchName && updated.repoId) {
-        const epic = updated.epicId
-          ? db.select().from(epics).where(eq(epics.id, updated.epicId)).get()
-          : null;
-        if (epic?.workflowId) {
-          const ws = db.select().from(workflowStatuses)
-            .where(and(
-              eq(workflowStatuses.workflowId, epic.workflowId),
-              eq(workflowStatuses.statusId, patch.statusId)
-            ))
-            .get();
-          if (ws?.triggersMerge) {
-            const repo = db.select().from(repos).where(eq(repos.id, updated.repoId)).get();
-            const feature = updated.featureId
-              ? db.select().from(features).where(eq(features.id, updated.featureId)).get()
-              : null;
-            const targetBranch = feature?.branchName ?? repo?.baseBranch;
-            if (repo && targetBranch) {
-              const baseResult = git(["merge-base", targetBranch, updated.branchName], repo.path);
-              const base = baseResult.stdout.trim();
-              if (base) {
-                const mergeTreeResult = git(
-                  ["merge-tree", base, targetBranch, updated.branchName],
-                  repo.path
-                );
-                const hasConflicts = mergeTreeResult.stdout.includes("<<<<<<<");
-                if (hasConflicts) {
-                  db.update(cards)
-                    .set({ conflictedAt: nowIso(), conflictDetails: mergeTreeResult.stdout })
-                    .where(eq(cards.id, params.id))
-                    .run();
-                  const conflicted = db.select().from(cards).where(eq(cards.id, params.id)).get()!;
-                  wsManager.broadcast("card:conflicted", conflicted);
-                } else {
-                  // Clear any previous conflict state
-                  db.update(cards)
-                    .set({ conflictedAt: null, conflictDetails: null })
-                    .where(eq(cards.id, params.id))
-                    .run();
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // If card was moved to Done, check if any blocked-by-this-card cards are now fully unblocked
-      if (typeof patch.statusId === "string") {
-        const newStatus = db.select().from(statuses).where(eq(statuses.id, patch.statusId)).get();
-        if (newStatus?.name.toLowerCase() === "done") {
-          const doneStatusId = newStatus.id;
-          // Find all cards that were blocked by this card
-          const blockedByThis = db.select().from(cardDependencies)
-            .where(eq(cardDependencies.blockerCardId, params.id)).all();
-
-          for (const dep of blockedByThis) {
-            // Check if ALL blockers of that card are now Done
-            const allBlockers = db.select().from(cardDependencies)
-              .where(eq(cardDependencies.blockedCardId, dep.blockedCardId)).all();
-            const allDone = allBlockers.every((b) => {
-              if (b.blockerCardId === params.id) return true; // just marked done
-              const blockerCard = db.select().from(cards).where(eq(cards.id, b.blockerCardId)).get();
-              return blockerCard?.statusId === doneStatusId;
-            });
-            if (allDone) {
-              wsManager.broadcast("card:unblocked", { cardId: dep.blockedCardId });
-            }
-          }
-        }
-      }
 
       return serializeCard(updated);
     },
@@ -341,8 +357,6 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         t.Object({
           title: t.String(),
           description: t.String(),
-          statusId: t.String(),
-          agentId: t.String(),
           featureId: t.Union([t.String(), t.Null()]),
           epicId: t.Union([t.String(), t.Null()]),
           type: t.Union([

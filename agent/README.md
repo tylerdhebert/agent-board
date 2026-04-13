@@ -6,9 +6,16 @@ This directory holds the reusable agent instruction documents for this repo:
 - `AGENT_API.md`
 - `ORCHESTRATOR.md`
 - `BOARD_AGENT.md`
+
+Repo-local skill:
+
+- `.claude/skills/conflict-resolution/SKILL.md`
+
+Compatibility pointer:
+
 - `CONFLICT_RESOLVER.md`
 
-Use the helper scripts in `scripts/` to symlink those files into another directory without copying them.
+Use the helper scripts in `scripts/` to expose these docs in another directory as symlinks.
 
 Notes:
 

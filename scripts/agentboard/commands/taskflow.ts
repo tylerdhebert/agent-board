@@ -150,7 +150,7 @@ export async function handleFinish(state: CommandState, args: string[]) {
       ? await resolveStatusId(state, explicitStatus)
       : defaultBranchStatus ?? await resolveStatusId(state, "Done");
 
-  const updated = await state.client.request<Card>("PATCH", `/cards/${encodeURIComponent(cardId)}`, {
+  const updated = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(cardId)}/move`, {
     statusId,
     agentId,
   });
@@ -189,34 +189,12 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
     repo: { type: "string" },
     branch: { type: "string" },
     type: { type: "string", default: "task" },
-    agent: { type: "string" },
-    claim: { type: "boolean" },
-    noClaim: { type: "boolean" },
     plan: { type: "string" },
-    noAutoAdvance: { type: "boolean" },
   });
 
   const epicTitle = requireString(parsed.values, "epic");
   const featureTitle = requireString(parsed.values, "feature");
   const cardTitle = requireString(parsed.values, "title");
-  const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
-  const explicitClaim = boolValue(parsed.values, "claim");
-  const explicitNoClaim = boolValue(parsed.values, "noClaim");
-
-  if (explicitClaim && explicitNoClaim) {
-    throw new CliError("bootstrap accepts either --claim or --no-claim, not both.");
-  }
-
-  const shouldClaim =
-    explicitClaim
-      ? true
-      : explicitNoClaim
-        ? false
-        : Boolean(agentId);
-
-  if (shouldClaim && !agentId) {
-    throw new CliError("bootstrap needs an agent id to claim the new card. Pass --agent or --no-claim.");
-  }
 
   const statusName = (parsed.values.status as string | undefined) ?? "To Do";
   const statusId = await resolveStatusId(state, statusName);
@@ -266,29 +244,16 @@ export async function handleBootstrap(state: CommandState, args: string[]) {
     state.cache.features = undefined;
   }
 
-  let card = await state.client.request<Card>("POST", "/cards", {
+  const card = await state.client.request<Card>("POST", "/cards", {
     title: cardTitle,
     featureId: feature.id,
     statusId,
     type: parsed.values.type as string,
     description: (parsed.values.description as string | undefined) ?? "",
-    agentId: agentId ?? undefined,
     plan: typeof parsed.values.plan === "string" ? parsed.values.plan : undefined,
+    latestUpdate: typeof parsed.values.plan === "string" ? parsed.values.plan : undefined,
   });
   state.cache.cards = undefined;
-
-  if (shouldClaim) {
-    card = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(card.id)}/claim`, {
-      agentId,
-      autoAdvance: !boolValue(parsed.values, "noAutoAdvance"),
-    });
-    if (typeof parsed.values.plan === "string") {
-      await state.client.request("PATCH", `/cards/${encodeURIComponent(card.id)}`, {
-        latestUpdate: parsed.values.plan,
-      });
-      await postAgentComment(state, card.id, agentId, parsed.values.plan);
-    }
-  }
 
   const statuses = await loadStatuses(state);
   return {

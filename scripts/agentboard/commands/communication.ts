@@ -178,7 +178,7 @@ export async function handleInput(state: CommandState, args: string[]) {
           : undefined;
       const agentId =
         typeof parsed.values.agent === "string"
-          ? resolveAgentId(state, parsed.values.agent, false)
+          ? resolveAgentId(state, parsed.values.agent, false) ?? undefined
           : undefined;
       const data = await state.client.request<InputRequestRecord[]>(
         "GET",

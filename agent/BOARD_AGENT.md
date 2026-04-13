@@ -37,7 +37,7 @@ agentboard cards list --status "In Progress"
 agentboard cards list --unblocked
 ```
 
-`--unblocked` filters to cards with no active blockers — use it to find work that is ready to assign or pick up.
+`--unblocked` shows cards without unfinished dependency blockers. Use it as the dependency-ready view, then confirm status and context before dispatching work.
 
 `cards list` output example:
 
@@ -55,12 +55,13 @@ agentboard cards context --card card-142 --agent board-agent-q2-rollout-1
 Take corrective board action:
 
 ```bash
-agentboard cards update --card card-142 --agent board-agent-q2-rollout-1 --latest-update "Waiting on schema decision from orchestrator."
-agentboard cards update --card card-142 --agent board-agent-q2-rollout-1 --blocked-reason "Need decision on migration direction."
+agentboard cards update --card card-142 --latest-update "Waiting on schema decision from orchestrator."
+agentboard cards update --card card-142 --blocked-reason "Need decision on migration direction."
+agentboard cards comment --card card-142 --agent board-agent-q2-rollout-1 --body "Board note: waiting on schema decision from orchestrator."
 agentboard dep add --card card-144 --blocker card-142
 ```
 
-Include `--agent` on `cards update` commands so board narration stays attributable even when the mutation does not change status.
+Use `cards comment` for attributed narration. Keep `cards update` focused on first-class card fields such as `latestUpdate` and `blockedReason`.
 
 ## Assignment and identity contract
 
@@ -155,7 +156,7 @@ agentboard worktree remove --repo agent-board --card card-142
 
 Board-agent should always request explicit base-branch input before creating a worktree.
 Treat this as a blocking decision point: wait for an answer or timeout before proceeding.
-The CLI does not enforce this — it is a role protocol. The `--base` flag is optional and the CLI will fall back to defaults if omitted. Always request user input first when acting as board-agent.
+`worktree create` accepts an optional `--base` flag and otherwise resolves the base automatically in the default order below. Board-agent policy is to ask first, then pass the chosen base when available.
 
 Default base resolution order:
 
@@ -200,16 +201,12 @@ For branch-backed work under worktree workflows, `Ready to Merge` is the merge-r
 
 ## Conflict escalation
 
-When a card has `conflictedAt` set (visible in card context output), prepare a resolver ticket for orchestrator:
+When a card has `conflictedAt` set, route the repair work back to the card owner or another implementer instead of creating a separate resolver worker role.
 
-```bash
-agentboard cards update --card card-142 --agent board-agent-q2-rollout-1 --latest-update "Conflict detected; resolver ticket prepared for orchestrator dispatch."
-```
+Point the implementer at the repo-local skill:
 
-After dispatching, monitor the card with `cards context`. When the output no longer includes `Conflicted:` and shows `Handoff:` set, the resolver is done. Advance the card to the appropriate next status:
+`[.claude/skills/conflict-resolution/SKILL.md](/C:/Users/Tyler/documents/projects/agent-board/.claude/skills/conflict-resolution/SKILL.md)`
 
-```bash
-agentboard cards move --card card-142 --agent board-agent-q2-rollout-1 --to "In Review"
-```
+Use card comments or queue replies to make the handoff explicit, then monitor the card until the owner clears the conflict and records the outcome.
 
-Do not clear conflicts or attempt resolution yourself — that is the conflict resolver's job.
+Do not clear conflicts or attempt branch repair yourself unless you are explicitly switching into implementer work.

@@ -14,7 +14,7 @@ Use the CLI by default. Run `agentboard help` for the full command reference. Ra
 
 - Never begin meaningful work without a card.
 - Never leave a card in a misleading status.
-- Never change status through the raw API without including `agentId`. (The server accepts status changes without `agentId`; this is a protocol obligation enforced by agent discipline, not by the server.)
+- Never change status through the raw API except via the dedicated move route. Use `POST /cards/:id/move` and include `agentId` when an agent is performing the move.
 - Never ask a human for a blocking decision in free text when `input request` should be used.
 - Never go silent on an active card for long stretches.
 - Never merge your own worktree branch unless you are explicitly acting as the orchestrator or human operator.
@@ -49,7 +49,7 @@ Control roles (`planner`, `orchestrator`, `board-agent`) should use request-scop
 Worker execution roles should remain task/card-based:
 
 - card-backed work: `{role}-{card-ref}` (for example `implementer-card-142`, `reviewer-card-142`)
-- direct worker fallback (no board-agent): `{role}-{task-slug}-{n}` (for example `implementer-auth-flow-1`)
+- direct worker IDs when no board-agent is active: `{role}-{task-slug}-{n}` (for example `implementer-auth-flow-1`)
 
 When no board-agent is active (direct user-to-agent execution), the executing agent may choose its own ID:
 
@@ -59,8 +59,8 @@ When no board-agent is active (direct user-to-agent execution), the executing ag
 
 Stability rule:
 
-- Once an agent ID is chosen for a card/turn thread, do not rename it mid-execution.
-- Always use `agentboard id suggest` to choose an ID. The server does not prevent duplicate agent IDs — collision avoidance is the agent's responsibility.
+- Once an agent ID is chosen for a card/turn thread, keep it stable for the full execution.
+- Always use `agentboard id suggest` to choose the next available ID and avoid collisions.
 
 Helper command:
 
@@ -70,7 +70,6 @@ agentboard id suggest --role planner --control --request q2-rollout
 agentboard id suggest --role board-agent --control --request q2-rollout
 agentboard id suggest --role implementer --card card-142
 agentboard id suggest --role reviewer --card card-142
-agentboard id suggest --role conflict-resolver --card card-142
 agentboard id suggest --role implementer --task "auth flow"
 ```
 
@@ -101,13 +100,14 @@ agentboard cards context --card <card-ref> --agent <agent-id>
 - Prefer `bootstrap` when you need to create epic, feature, and card together.
 
 ```bash
-agentboard bootstrap --epic "..." --feature "..." --title "..." --agent <agent-id>
+agentboard bootstrap --epic "..." --feature "..." --title "..."
 ```
 
 - Use `cards create` only when the epic and feature already exist.
 
 ```bash
-agentboard cards create --feature <feature-ref> --title "..." --claim --agent <agent-id>
+agentboard cards create --feature <feature-ref> --title "..."
+agentboard start --agent <agent-id> --card <card-ref>
 ```
 
 ### During work
@@ -213,13 +213,14 @@ agentboard cards recheck-conflicts --card <card-ref>
 - One card should map to one worktree branch.
 - The feature branch is the integration base, not the shared worktree branch for multiple agents.
 - If the server marks a card as conflicted, resolve the branch, then clear and re-check conflict state before moving forward.
+- This repo provides `[.claude/skills/conflict-resolution/SKILL.md](/.claude/skills/conflict-resolution/SKILL.md)` for branch conflict repair. Treat that work as implementer-owned unless a human explicitly chooses a different coordination model.
 
 ## Explicit CLI discipline
 
-- There is no saved CLI session or per-repo context.
-- There is no implicit agent/card environment fallback.
+- The CLI is stateless and explicit.
 - `--agent` and `--card` are per-command flags. Place them after the subcommand (for example: `agentboard cards move --card card-142 --agent implementer-1 --to "In Review"`).
 - `--url` and `--json` are global flags and may appear before or after the command name.
+- Treat each command as a fresh call: pass the card and agent refs you want that command to operate on.
 
 ## Reading CLI output
 
@@ -244,7 +245,7 @@ These are protocol violations:
 - coding without a claimed or active card
 - completing work without updating the board
 - asking for a human decision outside `input request` when the decision blocks progress
-- moving status through the raw API without `agentId` (agent discipline — the server does not reject this, but it violates the protocol)
+- moving status through the raw API outside `POST /cards/:id/move`
 - leaving blocked work undocumented
 - leaving a branch-backed card in a misleading non-handoff state
 

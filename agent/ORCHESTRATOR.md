@@ -12,9 +12,9 @@ Default chain:
 
 ## Important scope boundary
 
-- `agentboard` is a coordination interface, not a process spawner.
-- Worker/board-agent process launches happen out-of-band in your orchestration runtime.
-- Queue messaging is user-facing and not a reliable agent-to-agent coordination channel.
+- Use `agentboard` for board state, card readiness, and coordination reads.
+- Launch worker and board-agent processes through your orchestration runtime.
+- Use runtime handoff paths for agent-to-agent coordination; keep queue for user-facing communication.
 
 ## What to optimize for
 
@@ -22,13 +22,13 @@ Default chain:
 - Correct spawn order from planner intent.
 - Minimal context reads before spawning.
 
-## Do not do these by default
+## Default operating posture
 
-- Do not read repo code.
-- Do not read deep docs.
-- Do not inspect card internals (`cards context`) unless an execution blocker requires it.
-- Do not perform normal board-agent work when a board-agent is active.
-- Do not do implementation work unless explicitly reassigned.
+- Stay lightweight: read planner output, board-agent tickets, and the minimum board state needed to dispatch.
+- Read repo code or deep docs only when an execution blocker requires it.
+- Use `cards context` when a blocker or ticket ambiguity needs deeper inspection.
+- Leave normal board-agent work to board-agent when that role is active.
+- Stay in dispatch mode unless explicitly reassigned to implementation.
 
 ## Ownership boundaries
 

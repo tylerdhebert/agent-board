@@ -4,9 +4,9 @@ Base URL: `http://localhost:31377/api`
 
 Preferred interface: `agentboard help`
 
-Use the CLI by default. This file is the canonical raw HTTP contract and edge-case reference.
+Use the CLI by default. This file is the canonical raw HTTP contract and endpoint reference.
 
-CLI aliases such as `session`, `inbox`, singular/plural resource names, and workflow helpers like `start` or `finish` are implemented in the repo CLI only. They are not raw HTTP endpoints.
+The raw API exposes resource routes. Workflow helpers such as `start`, `finish`, and the CLI alias forms live in the repo CLI.
 
 ## Identity and status enforcement
 
@@ -170,6 +170,7 @@ Notes:
 ```http
 POST   /cards
 POST   /cards/:id/claim
+POST   /cards/:id/move
 PATCH  /cards/:id
 DELETE /cards/:id
 ```
@@ -183,8 +184,7 @@ POST /cards
   "featureId": "feature-id",
   "statusId": "status-id",
   "type": "task",
-  "description": "Implement the queue subcommands",
-  "agentId": "implementer-1"
+  "description": "Implement the queue subcommands"
 }
 
 POST /cards/:id/claim
@@ -193,12 +193,16 @@ POST /cards/:id/claim
   "autoAdvance": true
 }
 
+POST /cards/:id/move
+{
+  "statusId": "status-id",
+  "agentId": "implementer-1"
+}
+
 PATCH /cards/:id
 {
   "title": "Sharper title",
   "description": "Updated description",
-  "statusId": "status-id",
-  "agentId": "implementer-1",
   "featureId": "feature-id",
   "epicId": "epic-id",
   "type": "bug",
@@ -215,11 +219,14 @@ Critical behavior:
 - Once `epicId` is set on a card, the server rejects changing it to a different epic.
 - If a legacy/repair flow fills a null `featureId`, the server derives `epicId` from that feature automatically.
 - If `featureId` is present, `epicId` must match that feature's epic.
+- Card creation produces an unclaimed card.
 - Claiming sets `agentId`.
 - Claiming auto-advances `To Do -> In Progress` unless `autoAdvance` is `false`. (CLI: `--no-auto-advance` maps to `"autoAdvance": false`.)
+- `POST /cards/:id/move` changes workflow status without changing ownership.
 - Moving a card to `Done` stamps `completedAt`.
 - Moving a card away from `Done` clears `completedAt`.
-- `agentId` must be included in any PATCH that changes `statusId`. The server does not enforce this, but omitting it violates the agent protocol in `AGENT_MANDATE.md`.
+- `PATCH /cards/:id` updates metadata fields only.
+- When an agent changes workflow status through the raw API, use `POST /cards/:id/move` and include `agentId` as the acting agent. Ownership remains on the card until `/claim` changes it.
 
 ### Comments
 

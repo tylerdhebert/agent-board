@@ -38,13 +38,14 @@ The database is created automatically at `data/agent-board.db` on first run. Def
 
 ### For agents
 - Create and update cards to represent their work
-- Post attributed comments to narrate progress
 - Claim cards to take ownership and auto-advance to In Progress
+- Move cards through workflow without changing ownership
+- Post attributed comments to narrate progress
 - Request user input — the HTTP call long-polls until you answer
 - Check for and reply to user messages via the queue API
 - Declare blockers on cards; the server emits `card:unblocked` when all blockers are cleared
 - Signal merge readiness by moving a card to a `triggersMerge` status — the server auto-checks for conflicts and marks the card with `conflictedAt` if found
-- Clear a conflict after rebasing by patching `conflictedAt: null`
+- Clear a conflict after rebasing by clearing both `conflictedAt` and `conflictDetails` (`agentboard cards update --clear-conflict`)
 
 ---
 
@@ -57,7 +58,7 @@ For normal operation, agents need two things:
 1. Run `agentboard help` — prints the full command reference, hot path, conventions, and all behavioral notes inline.
 2. Read `agent/AGENT_MANDATE.md` — covers behavioral obligations, role ownership, communication rules, and non-negotiable failures.
 
-Use `agent/AGENT_API.md` only as the raw HTTP fallback when the CLI does not expose what is needed.
+Use `agent/AGENT_API.md` when you need the raw HTTP contract or direct endpoint-level control.
 
 ### Reuse the agent docs with symlink scripts
 
@@ -74,6 +75,7 @@ Useful defaults:
 - The normal card path is `To Do -> In Progress -> In Review -> Needs Revision -> Done`, with `Blocked` reserved for real pauses.
 - For parallel work on one feature, use separate card worktree branches per agent. Treat the feature branch as the integration base, not the shared implementation branch.
 - `Ready to Merge` is the merge-ready status for worktree workflows.
+- Repo-local conflict resolution skill: `.claude/skills/conflict-resolution/SKILL.md`
 
 To symlink those agent docs into another directory, run one of:
 
@@ -137,7 +139,7 @@ When a card moves to a status marked `triggersMerge: true` and has a `branchName
 - If conflicts are found: `conflictedAt` is stamped on the card and the `card:conflicted` WS event fires. An amber warning badge appears on the card tile.
 - If clean: any previous conflict state is cleared.
 - The card modal shows a **View Conflicts** button that opens a per-file conflict diff viewer with conflict-marker highlighting.
-- **Resolver agents** rebase their branch, then clear the conflict by patching `conflictedAt: null`. Moving the card back to the `triggersMerge` status re-runs the check.
+- The current card owner should resolve the branch conflict, then clear both `conflictedAt` and `conflictDetails`. This repo provides `.claude/skills/conflict-resolution/SKILL.md` for that workflow. Moving the card back to the `triggersMerge` status re-runs the check.
 
 ---
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Conflict Resolution"
+  short_description: "Resolve conflicted card branches safely"
+  default_prompt: "Use $conflict-resolution to resolve merge conflicts on an agent-board card branch without changing card ownership."

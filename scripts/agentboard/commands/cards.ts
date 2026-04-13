@@ -207,42 +207,24 @@ export async function handleCard(state: CommandState, args: string[]) {
         status: { type: "string" },
         type: { type: "string", default: "task" },
         description: { type: "string" },
-        agent: { type: "string" },
-        claim: { type: "boolean" },
         plan: { type: "string" },
         latestUpdate: { type: "string" },
         blockedReason: { type: "string" },
-        noAutoAdvance: { type: "boolean" },
       });
       const featureId = await resolveFeatureId(state, requireString(parsed.values, "feature"));
       const statusId = await resolveStatusId(state, (parsed.values.status as string | undefined) ?? "To Do");
-      const requestedAgentId =
-        typeof parsed.values.agent === "string"
-          ? resolveAgentId(state, parsed.values.agent as string, false)
-          : null;
-      let card = await state.client.request<Card>("POST", "/cards", {
+      const card = await state.client.request<Card>("POST", "/cards", {
         title: requireString(parsed.values, "title"),
         featureId,
         statusId,
         type: parsed.values.type as string,
         description: (parsed.values.description as string | undefined) ?? "",
-        agentId: requestedAgentId ?? undefined,
         plan: parsed.values.plan as string | undefined,
-        latestUpdate: parsed.values.latestUpdate as string | undefined,
+        latestUpdate:
+          (parsed.values.latestUpdate as string | undefined)
+          ?? (parsed.values.plan as string | undefined),
         blockedReason: parsed.values.blockedReason as string | undefined,
       });
-
-      if (boolValue(parsed.values, "claim")) {
-        const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
-        card = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(card.id)}/claim`, {
-          agentId,
-          autoAdvance: !boolValue(parsed.values, "noAutoAdvance"),
-        });
-      }
-
-      if (typeof parsed.values.plan === "string" && card.agentId) {
-        await postAgentComment(state, card.id, card.agentId, parsed.values.plan);
-      }
 
       const [statuses, features, epics] = await Promise.all([
         loadStatuses(state),
@@ -300,7 +282,7 @@ export async function handleCard(state: CommandState, args: string[]) {
         throw new CliError('card move requires --to "<status>" or --status "<status>"');
       }
       const statusId = await resolveStatusId(state, destination);
-      const updated = await state.client.request<Card>("PATCH", `/cards/${encodeURIComponent(cardId)}`, {
+      const updated = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(cardId)}/move`, {
         statusId,
         agentId,
       });
@@ -319,7 +301,6 @@ export async function handleCard(state: CommandState, args: string[]) {
         card: { type: "string" },
         title: { type: "string" },
         description: { type: "string" },
-        status: { type: "string" },
         feature: { type: "string" },
         epic: { type: "string" },
         type: { type: "string" },
@@ -327,7 +308,6 @@ export async function handleCard(state: CommandState, args: string[]) {
         latestUpdate: { type: "string" },
         handoffSummary: { type: "string" },
         blockedReason: { type: "string" },
-        agent: { type: "string" },
         clearConflict: { type: "boolean" },
       });
       const cardRef = requireString(parsed.values, "card");
@@ -335,9 +315,6 @@ export async function handleCard(state: CommandState, args: string[]) {
       const body: Record<string, unknown> = {};
       if (typeof parsed.values.title === "string") body.title = parsed.values.title;
       if (typeof parsed.values.description === "string") body.description = parsed.values.description;
-      if (typeof parsed.values.status === "string") {
-        body.statusId = await resolveStatusId(state, parsed.values.status);
-      }
       if (typeof parsed.values.feature === "string") {
         body.featureId = await resolveFeatureId(state, parsed.values.feature);
       }
@@ -353,15 +330,13 @@ export async function handleCard(state: CommandState, args: string[]) {
         body.conflictedAt = null;
         body.conflictDetails = null;
       }
-      const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, false);
-      if (agentId) body.agentId = agentId;
       if (Object.keys(body).length === 0) {
         throw new CliError("card update requires at least one patch field");
       }
       const updated = await state.client.request<Card>("PATCH", `/cards/${encodeURIComponent(cardId)}`, body);
       return {
         __render: "card-context",
-        data: await buildCardContext(state, updated.id, agentId ?? updated.agentId ?? null),
+        data: await buildCardContext(state, updated.id, updated.agentId ?? null),
       };
     }
     case "comment": {
