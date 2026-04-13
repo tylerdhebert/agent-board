@@ -180,15 +180,21 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       }),
     }
   )
-  // Cards completed today (local date prefix match on completed_at)
-  .get("/completed-today", () => {
-    const today = localDateKey(new Date());
+  // Cards completed on the requested local day (defaults to today)
+  .get("/completed-today", ({ query }) => {
+    const targetDay = query?.date ?? localDateKey(new Date());
     return db
       .select()
       .from(cards)
       .all()
-      .filter((card) => card.completedAt && localDateKey(new Date(card.completedAt)) === today)
+      .filter((card) => card.completedAt && localDateKey(new Date(card.completedAt)) === targetDay)
       .map(serializeCard);
+  }, {
+    query: t.Optional(
+      t.Object({
+        date: t.Optional(t.String()),
+      })
+    ),
   })
   // Get single card with comments
   .get(

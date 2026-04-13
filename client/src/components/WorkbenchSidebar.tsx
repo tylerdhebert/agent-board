@@ -14,10 +14,9 @@ export function WorkbenchSidebar({ requests }: WorkbenchSidebarProps) {
       <div className="workbench-rail__stack">
         <InputNotificationBanner requests={requests} embedded />
         <NotificationPrompt embedded />
-        <DailySummaryBar embedded />
         <ChatWidget embedded />
+        <DailySummaryBar embedded />
       </div>
     </aside>
   );
 }
-
