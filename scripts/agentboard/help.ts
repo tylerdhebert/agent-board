@@ -55,8 +55,8 @@ CORE CONVENTIONS
   Explicit-first and stateless: each command stands on its own.
   Pass --agent and --card on every command that needs them.
   --agent and --card are per-command flags: place them after the subcommand.
-    correct:   agentboard cards move --card card-142 --agent implementer-1 --to "In Review"
-    incorrect: agentboard --agent implementer-1 cards move --card card-142 --to "In Review"
+    correct:   agentboard cards move --card card-142 --status "In Review"
+    incorrect: agentboard --card card-142 cards move --status "In Review"
   --url and --json are global and may appear before or after the command name.
 
   Preferred refs:  cards → card-142,  features → feat-12
@@ -280,8 +280,7 @@ Use dep to express card-to-card blocking relationships. Do not bury blockers in 
   Create, claim, and move:
     agentboard cards create --title "..." --feature <feature> [--status <status>]
     agentboard cards claim --card <card> --agent <id> [--no-auto-advance]
-    agentboard cards move --card <card> --to "<status>" --agent <id>
-    agentboard cards move --card <card> --status "<status>" --agent <id>
+    agentboard cards move --card <card> --status "<status>"
 
   Update first-class fields:
     agentboard cards update --card <card> [--title ...] [--description ...] [--feature ...] [--type ...]
@@ -303,11 +302,8 @@ Notes:
       pending input requests, recent comments, and suggested branch. Use context before touching code.
 
   cards list flags:
-    - --unblocked filters to cards with no active blockers. Useful for orchestrators finding dependency-ready work.
+    - --unblocked filters to cards with no active dependency blockers and no pending input requests. Useful for orchestrators finding cards that are ready to pick up.
     - --mine filters cards owned by the provided --agent.
-
-  cards move flags:
-    - --to and --status are equivalent. If both are passed, --to takes priority.
 
   Ownership and workflow:
     - start and cards claim set ownership on the card.

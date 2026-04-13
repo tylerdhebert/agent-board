@@ -9,18 +9,14 @@ This directory holds the reusable agent instruction documents for this repo:
 
 Repo-local skill:
 
-- `.claude/skills/conflict-resolution/SKILL.md`
+- `skills/conflict-resolution/SKILL.md`
 
-Compatibility pointer:
-
-- `CONFLICT_RESOLVER.md`
-
-Use the helper scripts in `scripts/` to expose these docs in another directory as symlinks.
+Use the helper scripts in `scripts/` to expose these docs in another directory as symlinks. The scripts link the markdown files and create a `skills/` directory in the destination with symlinks to each skill subdirectory.
 
 Notes:
 
 - `link-agent-docs.sh` is for environments with `bash` and `ln -s`.
-- On Windows, `link-agent-docs.ps1` may require an elevated shell or Developer Mode to create file symlinks.
+- On Windows, `link-agent-docs.ps1` uses Junctions for skill directories (no elevated shell needed) and SymbolicLinks for files (may require elevated shell or Developer Mode).
 
 Examples:
 

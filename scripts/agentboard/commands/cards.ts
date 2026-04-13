@@ -268,23 +268,17 @@ export async function handleCard(state: CommandState, args: string[]) {
     case "move": {
       const parsed = parseFlags(rest, {
         card: { type: "string" },
-        to: { type: "string" },
         status: { type: "string" },
-        agent: { type: "string" },
       });
       const cardRef = requireString(parsed.values, "card");
       const cardId = await resolveCardId(state, cardRef);
-      const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
-      const destination =
-        (parsed.values.to as string | undefined)
-        ?? (parsed.values.status as string | undefined);
+      const destination = parsed.values.status as string | undefined;
       if (!destination) {
-        throw new CliError('card move requires --to "<status>" or --status "<status>"');
+        throw new CliError('cards move requires --status "<status>"');
       }
       const statusId = await resolveStatusId(state, destination);
       const updated = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(cardId)}/move`, {
         statusId,
-        agentId,
       });
       const statuses = await loadStatuses(state);
       return {

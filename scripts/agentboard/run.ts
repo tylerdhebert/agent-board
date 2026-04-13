@@ -63,8 +63,6 @@ export async function runCommand(state: CommandState, args: string[]) {
       return handleWorktree(state, rest);
     case "inbox":
       return handleQueue(state, ["inbox", ...rest]);
-    case "notify":
-      return handleQueue(state, ["send", ...rest]);
     default:
       throw new CliError(`Unknown command "${command}". Run "agentboard help" for usage.`);
   }

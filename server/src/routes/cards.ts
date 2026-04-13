@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { db } from "../db";
-import { cards, comments, statuses, repos, features, cardDependencies, epics, workflowStatuses } from "../db/schema";
+import { cards, comments, statuses, repos, features, cardDependencies, epics, workflowStatuses, inputRequests } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { wsManager } from "../wsManager";
@@ -127,6 +127,15 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
         }
 
         allCards = allCards.filter((c) => !cardIdsWithActiveblockers.has(c.id));
+
+        const cardIdsWithPendingInput = new Set(
+          db.select({ cardId: inputRequests.cardId })
+            .from(inputRequests)
+            .where(eq(inputRequests.status, "pending"))
+            .all()
+            .map((r) => r.cardId)
+        );
+        allCards = allCards.filter((c) => !cardIdsWithPendingInput.has(c.id));
       }
 
       return allCards.map(serializeCard);
@@ -265,8 +274,9 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
 
       const now = nowIso();
       const status = db.select().from(statuses).where(eq(statuses.id, body.statusId)).get();
+      const terminalStatuses = new Set(["done", "ready to merge"]);
       const completedAt =
-        status?.name.toLowerCase() === "done"
+        terminalStatuses.has(status?.name.toLowerCase() ?? "")
           ? now
           : null;
 
@@ -283,7 +293,6 @@ export const cardRoutes = new Elysia({ prefix: "/cards" })
       params: t.Object({ id: t.String() }),
       body: t.Object({
         statusId: t.String(),
-        agentId: t.Optional(t.String()),
       }),
     }
   )

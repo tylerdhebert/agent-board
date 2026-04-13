@@ -37,7 +37,7 @@ agentboard cards list --status "In Progress"
 agentboard cards list --unblocked
 ```
 
-`--unblocked` shows cards without unfinished dependency blockers. Use it as the dependency-ready view, then confirm status and context before dispatching work.
+`--unblocked` shows cards without unfinished dependency blockers and without pending input requests. Use it as the board's ready-work view, then confirm status and context before dispatching work.
 
 `cards list` output example:
 
@@ -205,7 +205,7 @@ When a card has `conflictedAt` set, route the repair work back to the card owner
 
 Point the implementer at the repo-local skill:
 
-`.claude/skills/conflict-resolution/SKILL.md`
+`agent/skills/conflict-resolution/SKILL.md`
 
 Use card comments or queue replies to make the handoff explicit, then monitor the card until the owner clears the conflict and records the outcome.
 

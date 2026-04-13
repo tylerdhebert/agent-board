@@ -25,7 +25,7 @@ The mandate covers behavioral obligations, role ownership, communication rules, 
 - Mandatory protocol and behavior rules: `agent/AGENT_MANDATE.md`
 - Raw HTTP/API reference for endpoint-level control: `agent/AGENT_API.md`
 - Role-specific guides: `agent/BOARD_AGENT.md`, `agent/ORCHESTRATOR.md`
-- Repo-local conflict skill: `.claude/skills/conflict-resolution/SKILL.md`
+- Repo-local conflict skill: `agent/skills/conflict-resolution/SKILL.md`
 
 ## Important norms
 

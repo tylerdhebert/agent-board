@@ -163,7 +163,7 @@ GET /cards/completed-today
 Notes:
 
 - `GET /cards/:id` returns the card plus embedded `comments`.
-- `unblocked=true` excludes cards with any active blocker whose blocker card is not in `Done`.
+- `unblocked=true` excludes cards that have any active dependency blocker not yet in `Done`, or any pending input request.
 
 ### Create, claim, update, delete
 
@@ -225,7 +225,6 @@ Critical behavior:
 - Moving a card to `Done` stamps `completedAt`.
 - Moving a card away from `Done` clears `completedAt`.
 - `PATCH /cards/:id` updates metadata fields only.
-- `POST /cards/:id/move` accepts an optional `agentId` field but does not store it. Ownership remains on the card until `/claim` changes it.
 
 ### Comments
 

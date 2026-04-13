@@ -151,6 +151,7 @@ function renderTaskflow(data: unknown): string {
   const lines = [
     `${String(payload.action ?? "Updated")} ${String(card?.ref ?? card?.id ?? "card")}`,
   ];
+  if (payload.prevAgentId) lines.push(`Reclaimed from: ${String(payload.prevAgentId)}`);
   if (card?.title) lines.push(`Title: ${String(card.title)}`);
   if (payload.statusName) lines.push(`Status: ${String(payload.statusName)}`);
   if (card?.branchName) {
@@ -362,7 +363,11 @@ function renderBootstrap(data: unknown): string {
   if (card) {
     const status = String(payload.statusName ?? card.statusId ?? "-");
     const agent = card.agentId ? ` (claimed by ${String(card.agentId)})` : "";
-    lines.push(`Card: ${String(card.ref ?? card.id ?? "-")} "${String(card.title ?? "-")}" → ${status}${agent}`);
+    const cardRef = String(card.ref ?? card.id ?? "-");
+    lines.push(`Card: ${cardRef} "${String(card.title ?? "-")}" → ${status}${agent}`);
+    if (!card.agentId) {
+      lines.push(`Next: agentboard start --agent <agent-id> --card ${cardRef}`);
+    }
   }
   return lines.join("\n");
 }

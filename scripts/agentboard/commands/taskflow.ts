@@ -31,6 +31,8 @@ export async function handleStart(state: CommandState, args: string[]) {
   });
   const cardId = await resolveCardId(state, parsed.values.card as string | undefined);
   const agentId = resolveAgentId(state, parsed.values.agent as string | undefined, true)!;
+  const existing = await state.client.request<Card>("GET", `/cards/${encodeURIComponent(cardId)}`);
+  const prevAgentId = existing.agentId ?? null;
   const claimed = await state.client.request<Card>("POST", `/cards/${encodeURIComponent(cardId)}/claim`, {
     agentId,
     autoAdvance: !boolValue(parsed.values, "noAutoAdvance"),
@@ -60,6 +62,7 @@ export async function handleStart(state: CommandState, args: string[]) {
       statusName: statuses.find((status) => status.id === claimed.statusId)?.name ?? claimed.statusId,
       inboxCount: inbox.length,
       inboxMessages: inbox,
+      prevAgentId: prevAgentId !== agentId ? prevAgentId : null,
     },
   };
 }

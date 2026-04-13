@@ -14,7 +14,7 @@ Use the CLI by default. Run `agentboard help` for the full command reference. Ra
 
 - Never begin meaningful work without a card.
 - Never leave a card in a misleading status.
-- Never change status through the raw API except via the dedicated move route. Use `POST /cards/:id/move` and include `agentId` when an agent is performing the move.
+- Never change status through the raw API except via the dedicated move route. Use `POST /cards/:id/move`.
 - Never ask a human for a blocking decision in free text when `input request` should be used.
 - Never go silent on an active card for long stretches.
 - Never merge your own worktree branch unless you are explicitly acting as the orchestrator or human operator.
@@ -83,16 +83,18 @@ agentboard id suggest --role implementer --task "auth flow"
 agentboard inbox --agent <agent-id>
 ```
 
-2. Resume an existing card:
-
-```bash
-agentboard start --agent <agent-id> --card <card-ref>
-```
-
-3. Inspect the card before you code:
+2. Inspect the card before claiming it:
 
 ```bash
 agentboard cards context --card <card-ref> --agent <agent-id>
+```
+
+This confirms the current owner and full card state before you take ownership. `start` is a claim operation — it overwrites the existing `agentId`. If another agent owns the card, calling `start` reassigns it and the response will include a `Reclaimed from:` line showing the previous owner.
+
+3. Claim the card and begin work:
+
+```bash
+agentboard start --agent <agent-id> --card <card-ref>
 ```
 
 4. If the work does not exist on the board yet:
@@ -128,7 +130,7 @@ agentboard checkpoint --card <card-ref> --agent <agent-id> --body "Parser is fix
 - Move the active card through statuses truthfully:
 
 ```bash
-agentboard cards move --card <card-ref> --agent <agent-id> --status "In Review"
+agentboard cards move --card <card-ref> --status "In Review"
 ```
 
 - Declare card-to-card blockers explicitly:
@@ -182,10 +184,12 @@ agentboard inbox --agent <agent-id>
 agentboard finish --agent <agent-id> --card <card-ref> --summary "What changed and how it was verified."
 ```
 
-`finish` should leave the card in a truthful handoff state:
+`finish` auto-selects the terminal status:
 
-- `Done` for ordinary completed work
-- `Ready to Merge` for branch-backed work when available
+- **Branch-backed cards** (`branchName` + `repoId` set): `finish` moves to `Ready to Merge` automatically when that status exists. Use `--status "Done"` to override.
+- **All other cards**: `finish` moves to `Done`.
+
+The `Status:` line in the response shows the actual status chosen.
 
 If you resolved conflicts manually, clear stale conflict state before handoff:
 
@@ -214,12 +218,12 @@ agentboard cards recheck-conflicts --card <card-ref>
 - One card should map to one worktree branch.
 - The feature branch is the integration base, not the shared worktree branch for multiple agents.
 - If the server marks a card as conflicted, resolve the branch, then clear and re-check conflict state before moving forward.
-- This repo provides `[.claude/skills/conflict-resolution/SKILL.md](/.claude/skills/conflict-resolution/SKILL.md)` for branch conflict repair. Treat that work as implementer-owned unless a human explicitly chooses a different coordination model.
+- This repo provides `agent/skills/conflict-resolution/SKILL.md` for branch conflict repair. Treat that work as implementer-owned unless a human explicitly chooses a different coordination model.
 
 ## Explicit CLI discipline
 
 - The CLI is stateless and explicit.
-- `--agent` and `--card` are per-command flags. Place them after the subcommand (for example: `agentboard cards move --card card-142 --agent implementer-1 --to "In Review"`).
+- `--agent` and `--card` are per-command flags. Place them after the subcommand (for example: `agentboard cards move --card card-142 --status "In Review"`).
 - `--url` and `--json` are global flags and may appear before or after the command name.
 - Treat each command as a fresh call: pass the card and agent refs you want that command to operate on.
 
